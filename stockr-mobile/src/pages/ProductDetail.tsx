@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api, type ProductDetail, type Attribute, type Location } from '../api';
 import PullToRefresh from '../components/PullToRefresh';
 import ConfirmModal from '../components/ConfirmModal';
+import { scanBarcode } from '../components/BarcodeScanner';
 
 function parseAttrs(s: string): Attribute[] {
   try { return JSON.parse(s); } catch { return []; }
@@ -20,6 +21,7 @@ export default function ProductDetailPage() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [defaultLocationId, setDefaultLocationId] = useState<string>('');
   const [savingDefault, setSavingDefault] = useState(false);
+  const [scanningVariantId, setScanningVariantId] = useState<string | null>(null);
 
   // New variant modal
   const [showNewVariant, setShowNewVariant] = useState(false);
@@ -51,6 +53,26 @@ export default function ProductDetailPage() {
       setEditMode(false);
       await load();
     } catch { /* ignore */ } finally { setSaving(false); }
+  };
+
+  const handleScanBarcode = async (variantId: string) => {
+    setScanningVariantId(variantId);
+    try {
+      const code = await scanBarcode();
+      if (!code) return;
+      const variant = product!.variants.find(v => v.id === variantId)!;
+      await api.variants.update(variantId, {
+        name: variant.name,
+        attributes: JSON.parse(variant.attributes),
+        costPrice: variant.costPrice,
+        salePrice: variant.salePrice,
+        shippingCost: variant.shippingCost,
+        barcode: code,
+      });
+      await load();
+    } finally {
+      setScanningVariantId(null);
+    }
   };
 
   const handleSaveDefaultLocation = async (locationId: string) => {
@@ -180,7 +202,23 @@ export default function ProductDetailPage() {
                     ))}
                   </div>
                 )}
-                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.625rem' }}>
+                <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  {v.barcode ? (
+                    <span style={{ fontSize: '0.75rem', color: '#64748b', background: '#1e2535', border: '1px solid #2a3045', borderRadius: '0.375rem', padding: '0.125rem 0.5rem', fontFamily: 'monospace' }}>
+                      🔖 {v.barcode}
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '0.75rem', color: '#475569' }}>Pas de code barre</span>
+                  )}
+                  <button
+                    style={{ fontSize: '0.75rem', padding: '0.125rem 0.5rem', background: 'rgba(43,140,238,0.12)', color: '#2b8cee', border: '1px solid rgba(43,140,238,0.3)', borderRadius: '0.375rem', cursor: 'pointer' }}
+                    onClick={() => handleScanBarcode(v.id)}
+                    disabled={scanningVariantId === v.id}
+                  >
+                    {scanningVariantId === v.id ? '…' : '📷 Scanner'}
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
                   <button className="btn-danger" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }} onClick={() => setDeleteVariant(v.id)}>Supprimer</button>
                 </div>
               </div>

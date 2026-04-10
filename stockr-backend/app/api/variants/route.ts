@@ -5,6 +5,15 @@ import { prisma } from '@/lib/prisma';
 export async function GET(req: NextRequest) {
   try { await requireAuth(req); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
   const productId = req.nextUrl.searchParams.get('productId');
+  const barcode = req.nextUrl.searchParams.get('barcode');
+  if (barcode) {
+    const variant = await prisma.productVariant.findUnique({
+      where: { barcode },
+      include: { stocks: { include: { location: true } }, product: true },
+    });
+    if (!variant) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    return NextResponse.json(variant);
+  }
   const where = productId ? { productId } : {};
   const variants = await prisma.productVariant.findMany({
     where,
@@ -16,7 +25,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try { await requireAuth(req); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
-  const { productId, name, attributes, costPrice, salePrice, shippingCost } = await req.json();
+  const { productId, name, attributes, costPrice, salePrice, shippingCost, barcode } = await req.json();
   if (!productId || !name?.trim()) {
     return NextResponse.json({ error: 'productId et nom requis' }, { status: 400 });
   }
@@ -28,6 +37,7 @@ export async function POST(req: NextRequest) {
       costPrice: Number(costPrice) || 0,
       salePrice: Number(salePrice) || 0,
       shippingCost: Number(shippingCost) || 0,
+      barcode: barcode?.trim() || null,
     },
   });
   return NextResponse.json(variant, { status: 201 });

@@ -3,6 +3,7 @@ import { api, type Sale, type Product, type Variant, type StockByLocation } from
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import PullToRefresh from '../components/PullToRefresh';
 import ConfirmModal from '../components/ConfirmModal';
+import { scanBarcode } from '../components/BarcodeScanner';
 
 function fmt(n: number) {
   return n.toFixed(2) + ' €';
@@ -42,6 +43,7 @@ export default function Sales() {
   const [nsNotes, setNsNotes] = useState('');
   const [nsLoading, setNsLoading] = useState(false);
   const [nsError, setNsError] = useState('');
+  const [nsScanLoading, setNsScanLoading] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -97,6 +99,34 @@ export default function Sales() {
     setNsVariantId(vid);
     const variant = nsVariants.find(v => v.id === vid);
     if (variant) setNsPrice(String(variant.salePrice));
+  };
+
+  const handleScanForSale = async () => {
+    setNsScanLoading(true);
+    setNsError('');
+    try {
+      const code = await scanBarcode();
+      if (!code) return;
+      const variant = await api.variants.findByBarcode(code);
+      // Load product context
+      const [variants, stocks] = await Promise.all([
+        api.variants.list(variant.product.id),
+        api.stocks.byProduct(variant.product.id),
+      ]);
+      setNsProductId(variant.product.id);
+      setNsVariants(variants);
+      setNsStocks(stocks);
+      setNsVariantId(variant.id);
+      setNsPrice(String(variant.salePrice));
+      // Pre-select default location
+      const product = products.find(p => p.id === variant.product.id);
+      if (product?.defaultLocationId) setNsLocationId(product.defaultLocationId);
+      else setNsLocationId('');
+    } catch {
+      setNsError('Code barre non reconnu — variante introuvable.');
+    } finally {
+      setNsScanLoading(false);
+    }
   };
 
   // Locations that have stock for selected variant
@@ -275,6 +305,21 @@ export default function Sales() {
             <div style={{ width: '2rem', height: '4px', background: '#2a3045', borderRadius: '2px', margin: '0 auto 1.25rem' }} />
             <h2 style={{ color: '#e2e8f0', fontSize: '1.125rem', fontWeight: 700, margin: '0 0 1rem' }}>💰 Nouvelle vente</h2>
             <form onSubmit={handleNewSale} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <button
+                type="button"
+                onClick={handleScanForSale}
+                disabled={nsScanLoading}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.75rem', background: 'rgba(43,140,238,0.1)', border: '1px dashed rgba(43,140,238,0.4)', borderRadius: '0.75rem', color: '#2b8cee', fontSize: '0.9375rem', fontWeight: 600, cursor: 'pointer' }}
+              >
+                {nsScanLoading ? '⏳ Scan en cours…' : '📷 Scanner un code barre'}
+              </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ flex: 1, height: '1px', background: '#2a3045' }} />
+                <span style={{ color: '#475569', fontSize: '0.75rem' }}>ou choisir manuellement</span>
+                <div style={{ flex: 1, height: '1px', background: '#2a3045' }} />
+              </div>
+
               <div>
                 <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">Produit</label>
                 <select value={nsProductId} onChange={e => onNsProductChange(e.target.value)} required>
