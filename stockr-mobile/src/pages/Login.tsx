@@ -12,8 +12,27 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    getServerUrl().then(url => setServerUrlState(url));
-  }, []);
+    getServerUrl().then(async url => {
+      setServerUrlState(url);
+      try {
+        const status = await api.setup.status();
+        if (status.needsSetup) navigate('/setup', { replace: true });
+      } catch {
+        // server not reachable yet
+      }
+    });
+  }, [navigate]);
+
+  const handleServerUrlChange = async (url: string) => {
+    setServerUrlState(url);
+    await setServerUrl(url.replace(/\/$/, ''));
+    try {
+      const status = await api.setup.status();
+      if (status.needsSetup) navigate('/setup', { replace: true });
+    } catch {
+      // server not reachable yet
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,7 +66,7 @@ export default function Login() {
           <input
             type="url"
             value={serverUrl}
-            onChange={e => setServerUrlState(e.target.value)}
+            onChange={e => handleServerUrlChange(e.target.value)}
             placeholder="http://192.168.1.x:3009"
             required
           />
