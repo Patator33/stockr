@@ -56,6 +56,13 @@ async function put<T>(path: string, body: unknown): Promise<T> {
   return data;
 }
 
+async function patch<T>(path: string, body: unknown): Promise<T> {
+  const res = await apiFetch(path, { method: 'PATCH', body: JSON.stringify(body) });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `${res.status}`);
+  return data;
+}
+
 async function del(path: string): Promise<void> {
   const res = await apiFetch(path, { method: 'DELETE' });
   if (!res.ok) throw new Error(`${res.status}`);
@@ -114,6 +121,14 @@ export const api = {
     create: (data: { saleId: string; quantity: number; reason?: string; notes?: string }) =>
       post('/api/returns', data),
     delete: (id: string) => del(`/api/returns/${id}`),
+  },
+  orders: {
+    list: (status?: string) => get<Order[]>(`/api/orders${status ? `?status=${status}` : ''}`),
+    get: (id: string) => get<Order>(`/api/orders/${id}`),
+    updateStatus: (id: string, status: string) => patch<Order>(`/api/orders/${id}`, { status }),
+    updateItemScanned: (orderId: string, itemId: string, scanned: number) =>
+      patch<OrderItem>(`/api/orders/${orderId}`, { itemId, scanned }),
+    delete: (id: string) => del(`/api/orders/${id}`),
   },
   stats: {
     get: (productId?: string, period?: number) => {
@@ -270,4 +285,27 @@ export interface TopVariant {
   returned: number;
   revenue: number;
   margin: number;
+}
+
+export interface OrderItem {
+  id: string;
+  orderId: string;
+  variantId?: string | null;
+  barcode?: string | null;
+  variantName: string;
+  quantity: number;
+  scanned: number;
+  variant?: { id: string; name: string; barcode?: string | null; product: { id: string; name: string } } | null;
+}
+
+export interface Order {
+  id: string;
+  source: string;
+  customerName?: string | null;
+  customerEmail?: string | null;
+  notes?: string | null;
+  status: string; // pending | confirmed | shipped
+  items: OrderItem[];
+  createdAt: string;
+  updatedAt: string;
 }

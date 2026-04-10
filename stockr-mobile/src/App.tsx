@@ -6,6 +6,7 @@ import BottomNav from './components/BottomNav';
 import Login from './pages/Login';
 import Setup from './pages/Setup';
 import Dashboard from './pages/Dashboard';
+import Orders from './pages/Orders';
 import Sales from './pages/Sales';
 import Stats from './pages/Stats';
 import Manage from './pages/Manage';
@@ -14,7 +15,7 @@ import ProductDetail from './pages/ProductDetail';
 import Locations from './pages/Locations';
 import Settings from './pages/Settings';
 
-const TABS = ['/', '/sales', '/stats', '/manage', '/settings'];
+const TABS = ['/', '/orders', '/sales', '/stats', '/settings'];
 
 function AppShell({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
@@ -76,6 +77,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/setup" element={<Setup />} />
         <Route path="/" element={<AuthGuard><AppShell><Dashboard /></AppShell></AuthGuard>} />
+        <Route path="/orders" element={<AuthGuard><AppShell><Orders /></AppShell></AuthGuard>} />
         <Route path="/sales" element={<AuthGuard><AppShell><Sales /></AppShell></AuthGuard>} />
         <Route path="/stats" element={<AuthGuard><AppShell><Stats /></AppShell></AuthGuard>} />
         <Route path="/manage" element={<AuthGuard><AppShell><Manage /></AppShell></AuthGuard>} />

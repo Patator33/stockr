@@ -1,0 +1,116 @@
+{
+  "name": "Stockr — Commandes Gmail",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [{ "mode": "everyMinute" }]
+        },
+        "filters": {
+          "readStatus": "unread",
+          "includeSpamTrash": false
+        },
+        "options": {}
+      },
+      "id": "gmail-trigger",
+      "name": "Gmail — Nouvelles commandes",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the email to extract order info\nconst email = $input.first().json;\n\nconst subject = email.subject || '';\nconst body = email.text || email.snippet || '';\nconst from = email.from?.value?.[0] || {};\n\n// Extract customer info\nconst customerEmail = from.address || '';\nconst customerName = from.name || customerEmail;\n\n// Try to parse items from body\n// Expected format (one per line): \"BARCODE x QUANTITY\" or \"PRODUCT_NAME x QUANTITY\"\n// Example: \"3760123456789 x 2\" or \"T-shirt Bleu XL x 1\"\nconst items = [];\nconst lines = body.split('\\n').filter(l => l.trim());\n\nfor (const line of lines) {\n  // Match patterns like \"something x 2\" or \"something × 2\"\n  const match = line.match(/^(.+?)\\s*[x×]\\s*(\\d+)$/i);\n  if (match) {\n    const nameOrBarcode = match[1].trim();\n    const quantity = parseInt(match[2], 10);\n    \n    // If looks like a barcode (all digits, 8-13 chars)\n    const isBarcode = /^\\d{8,13}$/.test(nameOrBarcode);\n    \n    items.push({\n      barcode: isBarcode ? nameOrBarcode : undefined,\n      variantName: nameOrBarcode,\n      quantity\n    });\n  }\n}\n\n// Fallback: if no items parsed, create a generic item from subject\nif (items.length === 0) {\n  items.push({\n    variantName: subject || 'Article non identifié',\n    quantity: 1\n  });\n}\n\nreturn [{\n  json: {\n    customerName,\n    customerEmail,\n    source: 'gmail',\n    notes: `Email: ${subject}`,\n    items\n  }\n}];"
+      },
+      "id": "parse-email",
+      "name": "Parser l'email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.STOCKR_URL }}/api/orders",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "create-order",
+      "name": "Créer commande Stockr",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [750, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "stockr-api-key",
+          "name": "Stockr API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.id }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "check-success",
+      "name": "Commande créée ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "operation": "markAsRead",
+        "messageId": "={{ $('Gmail — Nouvelles commandes').item.json.id }}"
+      },
+      "id": "mark-read",
+      "name": "Marquer lu",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [1250, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "console.error('Erreur création commande:', JSON.stringify($input.first().json));\nreturn $input.all();"
+      },
+      "id": "log-error",
+      "name": "Log erreur",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 400]
+    }
+  ],
+  "connections": {
+    "Gmail — Nouvelles commandes": {
+      "main": [[{ "node": "Parser l'email", "type": "main", "index": 0 }]]
+    },
+    "Parser l'email": {
+      "main": [[{ "node": "Créer commande Stockr", "type": "main", "index": 0 }]]
+    },
+    "Créer commande Stockr": {
+      "main": [[{ "node": "Commande créée ?", "type": "main", "index": 0 }]]
+    },
+    "Commande créée ?": {
+      "main": [
+        [{ "node": "Marquer lu", "type": "main", "index": 0 }],
+        [{ "node": "Log erreur", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["stockr"],
+  "variables": {}
+}
