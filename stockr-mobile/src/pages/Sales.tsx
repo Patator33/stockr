@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { api, type Sale, type Product } from '../api';
+import { api, type Sale, type Product, type Variant, type StockByLocation } from '../api';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import PullToRefresh from '../components/PullToRefresh';
 import ConfirmModal from '../components/ConfirmModal';
@@ -10,6 +10,10 @@ function fmt(n: number) {
 
 function fmtDate(d: string) {
   return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+interface NewSaleModal {
+  open: true;
 }
 
 export default function Sales() {
@@ -25,6 +29,19 @@ export default function Sales() {
   const [returnReason, setReturnReason] = useState('');
   const [returnLoading, setReturnLoading] = useState(false);
   const [returnError, setReturnError] = useState('');
+
+  // New sale modal
+  const [newSaleModal, setNewSaleModal] = useState<NewSaleModal | null>(null);
+  const [nsProductId, setNsProductId] = useState('');
+  const [nsVariants, setNsVariants] = useState<Variant[]>([]);
+  const [nsVariantId, setNsVariantId] = useState('');
+  const [nsStocks, setNsStocks] = useState<StockByLocation[]>([]);
+  const [nsLocationId, setNsLocationId] = useState('');
+  const [nsQty, setNsQty] = useState('1');
+  const [nsPrice, setNsPrice] = useState('');
+  const [nsNotes, setNsNotes] = useState('');
+  const [nsLoading, setNsLoading] = useState(false);
+  const [nsError, setNsError] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -44,6 +61,79 @@ export default function Sales() {
 
   useEffect(() => { load(); }, [load]);
   useAutoRefresh(load);
+
+  const openNewSale = () => {
+    setNsProductId('');
+    setNsVariants([]);
+    setNsVariantId('');
+    setNsStocks([]);
+    setNsLocationId('');
+    setNsQty('1');
+    setNsPrice('');
+    setNsNotes('');
+    setNsError('');
+    setNewSaleModal({ open: true });
+  };
+
+  const onNsProductChange = async (pid: string) => {
+    setNsProductId(pid);
+    setNsVariantId('');
+    setNsLocationId('');
+    setNsStocks([]);
+    setNsVariants([]);
+    if (!pid) return;
+    const [variants, stocks] = await Promise.all([
+      api.variants.list(pid),
+      api.stocks.byProduct(pid),
+    ]);
+    setNsVariants(variants);
+    setNsStocks(stocks);
+    // Pre-select default location if set on product
+    const product = products.find(p => p.id === pid);
+    if (product?.defaultLocationId) setNsLocationId(product.defaultLocationId);
+  };
+
+  const onNsVariantChange = (vid: string) => {
+    setNsVariantId(vid);
+    const variant = nsVariants.find(v => v.id === vid);
+    if (variant) setNsPrice(String(variant.salePrice));
+  };
+
+  // Locations that have stock for selected variant
+  const availableLocations = nsVariantId
+    ? nsStocks
+        .map(s => ({
+          location: s.location,
+          qty: s.items.find(i => i.variantId === nsVariantId)?.quantity ?? 0,
+        }))
+        .filter(s => s.qty > 0)
+    : [];
+
+  const selectedLocationStock = availableLocations.find(l => l.location.id === nsLocationId)?.qty ?? 0;
+  const selectedVariant = nsVariants.find(v => v.id === nsVariantId);
+
+  const handleNewSale = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setNsError('');
+    setNsLoading(true);
+    try {
+      await api.sales.create({
+        variantId: nsVariantId,
+        locationId: nsLocationId,
+        quantity: Number(nsQty),
+        unitSalePrice: Number(nsPrice),
+        unitCostPrice: selectedVariant?.costPrice ?? 0,
+        unitShippingCost: selectedVariant?.shippingCost ?? 0,
+        notes: nsNotes || undefined,
+      });
+      setNewSaleModal(null);
+      await load();
+    } catch (err: unknown) {
+      setNsError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setNsLoading(false);
+    }
+  };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -80,7 +170,12 @@ export default function Sales() {
     <>
       <PullToRefresh onRefresh={load}>
         <div className="pb-nav safe-top" style={{ padding: '1rem' }}>
-          <h1 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#e2e8f0', margin: '0 0 1rem' }}>💰 Ventes</h1>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+            <h1 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#e2e8f0', margin: 0 }}>💰 Ventes</h1>
+            <button className="btn-primary" style={{ padding: '0.5rem 0.875rem', fontSize: '0.875rem' }} onClick={openNewSale}>
+              + Vente
+            </button>
+          </div>
 
           {/* Filter */}
           <select value={productFilter} onChange={e => setProductFilter(e.target.value)} style={{ marginBottom: '1rem' }}>
@@ -165,6 +260,92 @@ export default function Sales() {
           onCancel={() => setDeleteTarget(null)}
           danger
         />
+      )}
+
+      {/* New sale bottom sheet */}
+      {newSaleModal && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end', zIndex: 100 }}
+          onClick={() => setNewSaleModal(null)}
+        >
+          <div
+            style={{ background: '#1e2535', borderRadius: '20px 20px 0 0', padding: '1.5rem', paddingBottom: 'calc(1.5rem + 72px)', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ width: '2rem', height: '4px', background: '#2a3045', borderRadius: '2px', margin: '0 auto 1.25rem' }} />
+            <h2 style={{ color: '#e2e8f0', fontSize: '1.125rem', fontWeight: 700, margin: '0 0 1rem' }}>💰 Nouvelle vente</h2>
+            <form onSubmit={handleNewSale} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div>
+                <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">Produit</label>
+                <select value={nsProductId} onChange={e => onNsProductChange(e.target.value)} required>
+                  <option value="">Choisir un produit…</option>
+                  {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+
+              {nsVariants.length > 0 && (
+                <div>
+                  <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">Variante</label>
+                  <select value={nsVariantId} onChange={e => onNsVariantChange(e.target.value)} required>
+                    <option value="">Choisir une variante…</option>
+                    {nsVariants.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {nsVariantId && (
+                <div>
+                  <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">
+                    Stock source {availableLocations.length === 0 ? '— aucun stock disponible' : ''}
+                  </label>
+                  <select value={nsLocationId} onChange={e => setNsLocationId(e.target.value)} required disabled={availableLocations.length === 0}>
+                    <option value="">Choisir une zone…</option>
+                    {availableLocations.map(({ location, qty }) => (
+                      <option key={location.id} value={location.id}>{location.name} ({qty} dispo)</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {nsLocationId && (
+                <>
+                  <div>
+                    <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">Quantité (max: {selectedLocationStock})</label>
+                    <input type="number" min="1" max={selectedLocationStock} value={nsQty} onChange={e => setNsQty(e.target.value)} required />
+                  </div>
+                  <div>
+                    <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">
+                      Prix de vente € {selectedVariant ? `(défaut: ${selectedVariant.salePrice.toFixed(2)} €)` : ''}
+                    </label>
+                    <input type="number" step="0.01" min="0" value={nsPrice} onChange={e => setNsPrice(e.target.value)} required />
+                  </div>
+                  {selectedVariant && nsPrice && (
+                    <div style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.15)', borderRadius: '0.5rem', padding: '0.625rem', fontSize: '0.8125rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span className="text-text-muted">Marge nette / unité</span>
+                        <span style={{ color: '#22c55e', fontWeight: 700 }}>
+                          {(Number(nsPrice) - selectedVariant.costPrice - selectedVariant.shippingCost).toFixed(2)} €
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">Notes (optionnel)</label>
+                    <input type="text" value={nsNotes} onChange={e => setNsNotes(e.target.value)} placeholder="Numéro commande, client…" />
+                  </div>
+                </>
+              )}
+
+              {nsError && <p style={{ color: '#ef4444', fontSize: '0.875rem', margin: 0 }}>{nsError}</p>}
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem' }}>
+                <button type="button" className="btn-ghost" style={{ flex: 1 }} onClick={() => setNewSaleModal(null)}>Annuler</button>
+                <button type="submit" className="btn-primary" style={{ flex: 2 }} disabled={nsLoading || !nsLocationId}>
+                  {nsLoading ? 'Enregistrement…' : 'Valider la vente'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* Return bottom sheet */}

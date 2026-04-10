@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api, type ProductDetail, type Attribute } from '../api';
+import { api, type ProductDetail, type Attribute, type Location } from '../api';
 import PullToRefresh from '../components/PullToRefresh';
 import ConfirmModal from '../components/ConfirmModal';
 
@@ -17,6 +17,9 @@ export default function ProductDetailPage() {
   const [editDesc, setEditDesc] = useState('');
   const [saving, setSaving] = useState(false);
   const [deleteVariant, setDeleteVariant] = useState<string | null>(null);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [defaultLocationId, setDefaultLocationId] = useState<string>('');
+  const [savingDefault, setSavingDefault] = useState(false);
 
   // New variant modal
   const [showNewVariant, setShowNewVariant] = useState(false);
@@ -30,9 +33,11 @@ export default function ProductDetailPage() {
 
   const load = useCallback(async () => {
     if (!id) return;
-    const p = await api.products.get(id);
+    const [p, locs] = await Promise.all([api.products.get(id), api.locations.list()]);
     setProduct(p);
+    setLocations(locs);
     if (!editName) { setEditName(p.name); setEditDesc(p.description || ''); }
+    setDefaultLocationId(p.defaultLocationId ?? '');
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
@@ -46,6 +51,15 @@ export default function ProductDetailPage() {
       setEditMode(false);
       await load();
     } catch { /* ignore */ } finally { setSaving(false); }
+  };
+
+  const handleSaveDefaultLocation = async (locationId: string) => {
+    if (!id) return;
+    setDefaultLocationId(locationId);
+    setSavingDefault(true);
+    try {
+      await api.products.update(id, { name: product!.name, description: product!.description, defaultLocationId: locationId || null });
+    } catch { /* ignore */ } finally { setSavingDefault(false); }
   };
 
   const handleCreateVariant = async (e: React.FormEvent) => {
@@ -108,6 +122,22 @@ export default function ProductDetailPage() {
 
           {product.description && !editMode && (
             <p style={{ color: '#94a3b8', fontSize: '0.875rem', marginBottom: '1rem' }}>{product.description}</p>
+          )}
+
+          {/* Default location */}
+          {locations.length > 0 && !editMode && (
+            <div style={{ background: '#141824', border: '1px solid #2a3045', borderRadius: '0.75rem', padding: '0.75rem 1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ fontSize: '0.8125rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>Stock par défaut</span>
+              <select
+                value={defaultLocationId}
+                onChange={e => handleSaveDefaultLocation(e.target.value)}
+                style={{ flex: 1, margin: 0, fontSize: '0.8125rem' }}
+                disabled={savingDefault}
+              >
+                <option value="">Aucun</option>
+                {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            </div>
           )}
 
           {/* Variants header */}

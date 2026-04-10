@@ -3,6 +3,10 @@ import { api, type Product, type StockByLocation, type Location, type Variant, t
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import PullToRefresh from '../components/PullToRefresh';
 
+interface AddStockModal {
+  productId: string;
+}
+
 interface TransferModal {
   variantId: string;
   variantName: string;
@@ -38,6 +42,15 @@ export default function Dashboard() {
   // Modals
   const [transferModal, setTransferModal] = useState<TransferModal | null>(null);
   const [saleModal, setSaleModal] = useState<SaleModal | null>(null);
+  const [addStockModal, setAddStockModal] = useState<AddStockModal | null>(null);
+
+  // Add stock form
+  const [addVariantId, setAddVariantId] = useState('');
+  const [addLocationId, setAddLocationId] = useState('');
+  const [addQty, setAddQty] = useState('');
+  const [addLoading, setAddLoading] = useState(false);
+  const [addError, setAddError] = useState('');
+  const [addVariants, setAddVariants] = useState<Variant[]>([]);
 
   // Transfer form state
   const [transferToId, setTransferToId] = useState('');
@@ -139,6 +152,31 @@ export default function Dashboard() {
     }
   };
 
+  const openAddStock = async () => {
+    setAddVariantId('');
+    setAddLocationId('');
+    setAddQty('');
+    setAddError('');
+    const variants = await api.variants.list(selectedProductId);
+    setAddVariants(variants);
+    setAddStockModal({ productId: selectedProductId });
+  };
+
+  const handleAddStock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddError('');
+    setAddLoading(true);
+    try {
+      await api.stocks.adjust({ variantId: addVariantId, locationId: addLocationId, quantity: Number(addQty) });
+      setAddStockModal(null);
+      await load();
+    } catch (err: unknown) {
+      setAddError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setAddLoading(false);
+    }
+  };
+
   const totalStock = stats?.totalStock ?? 0;
 
   return (
@@ -155,17 +193,25 @@ export default function Dashboard() {
 
           {/* Product selector */}
           {products.length > 0 && (
-            <select
-              value={selectedProductId}
-              onChange={e => onProductChange(e.target.value)}
-              style={{ marginBottom: '1rem' }}
-            >
-              {products.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.name} {p._count ? `(${p._count.variants} variante${p._count.variants > 1 ? 's' : ''})` : ''}
-                </option>
-              ))}
-            </select>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', alignItems: 'center' }}>
+              <select
+                value={selectedProductId}
+                onChange={e => onProductChange(e.target.value)}
+                style={{ flex: 1, margin: 0 }}
+              >
+                {products.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} {p._count ? `(${p._count.variants} variante${p._count.variants > 1 ? 's' : ''})` : ''}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="btn-primary"
+                style={{ padding: '0.5rem 0.875rem', fontSize: '0.875rem', whiteSpace: 'nowrap' }}
+                onClick={openAddStock}
+                disabled={!selectedProductId}
+              >+ Stock</button>
+            </div>
           )}
 
           {products.length === 0 && !loading && (
@@ -310,6 +356,53 @@ export default function Dashboard() {
                 <button type="button" className="btn-ghost" style={{ flex: 1 }} onClick={() => setTransferModal(null)}>Annuler</button>
                 <button type="submit" className="btn-primary" style={{ flex: 2 }} disabled={transferLoading}>
                   {transferLoading ? 'Transfert…' : 'Transférer'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Stock Bottom Sheet */}
+      {addStockModal && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end', zIndex: 100 }}
+          onClick={() => setAddStockModal(null)}
+        >
+          <div
+            style={{ background: '#1e2535', borderRadius: '20px 20px 0 0', padding: '1.5rem', paddingBottom: 'calc(1.5rem + 72px)', width: '100%' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ width: '2rem', height: '4px', background: '#2a3045', borderRadius: '2px', margin: '0 auto 1.25rem' }} />
+            <h2 style={{ color: '#e2e8f0', fontSize: '1.125rem', fontWeight: 700, margin: '0 0 1rem' }}>+ Ajouter du stock</h2>
+            <form onSubmit={handleAddStock} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div>
+                <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">Variante</label>
+                <select value={addVariantId} onChange={e => setAddVariantId(e.target.value)} required>
+                  <option value="">Choisir une variante…</option>
+                  {addVariants.map(v => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">Zone de stockage</label>
+                <select value={addLocationId} onChange={e => setAddLocationId(e.target.value)} required>
+                  <option value="">Choisir une zone…</option>
+                  {locations.map(l => (
+                    <option key={l.id} value={l.id}>{l.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">Quantité à ajouter</label>
+                <input type="number" min="1" value={addQty} onChange={e => setAddQty(e.target.value)} required />
+              </div>
+              {addError && <p style={{ color: '#ef4444', fontSize: '0.875rem', margin: 0 }}>{addError}</p>}
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem' }}>
+                <button type="button" className="btn-ghost" style={{ flex: 1 }} onClick={() => setAddStockModal(null)}>Annuler</button>
+                <button type="submit" className="btn-primary" style={{ flex: 2 }} disabled={addLoading}>
+                  {addLoading ? 'Ajout…' : 'Ajouter'}
                 </button>
               </div>
             </form>

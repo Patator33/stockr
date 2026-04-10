@@ -16,12 +16,13 @@ model User {
 }
 
 model Product {
-  id          String           @id @default(uuid())
-  name        String
-  description String?
-  variants    ProductVariant[]
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id                String           @id @default(uuid())
+  name              String
+  description       String?
+  defaultLocationId String?
+  variants          ProductVariant[]
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 }
 
 model ProductVariant {

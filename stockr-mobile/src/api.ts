@@ -76,7 +76,7 @@ export const api = {
     list: () => get<Product[]>('/api/products'),
     get: (id: string) => get<ProductDetail>(`/api/products/${id}`),
     create: (data: { name: string; description?: string }) => post<Product>('/api/products', data),
-    update: (id: string, data: { name: string; description?: string }) => put<Product>(`/api/products/${id}`, data),
+    update: (id: string, data: { name: string; description?: string; defaultLocationId?: string | null }) => put<Product>(`/api/products/${id}`, data),
     delete: (id: string) => del(`/api/products/${id}`),
   },
   variants: {
@@ -129,6 +129,7 @@ export interface Product {
   id: string;
   name: string;
   description?: string;
+  defaultLocationId?: string | null;
   _count?: { variants: number };
   createdAt: string;
 }
