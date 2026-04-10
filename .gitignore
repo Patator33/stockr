@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Next.js build
+stockr-backend/.next/
+stockr-backend/out/
+
+# SQLite dev DB
+stockr-backend/*.db
+stockr-backend/prisma/dev.db
+
+# Mobile build
+stockr-mobile/dist/
+stockr-mobile/android/
+stockr-mobile/ios/
+
+# Env files
+.env
+.env.local
+.env.production
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*

@@ -1,0 +1,24 @@
+services:
+  stockr:
+    image: ghcr.io/patator33/stockr:latest
+    ports:
+      - "${PORT_EXTERNAL:-3009}:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/data/stockr.db
+      - SESSION_SECRET=${SESSION_SECRET:-changez_moi_par_une_cle_de_64_caracteres_aleatoires_xxxxxxxxx}
+      - COOKIE_SECURE=${COOKIE_SECURE:-true}
+    volumes:
+      - stockr_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:3000/api/setup/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+volumes:
+  stockr_data:

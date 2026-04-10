@@ -1,0 +1,102 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+model Product {
+  id          String           @id @default(uuid())
+  name        String
+  description String?
+  variants    ProductVariant[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model ProductVariant {
+  id           String          @id @default(uuid())
+  productId    String
+  product      Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name         String
+  attributes   String          @default("[]")
+  costPrice    Float           @default(0)
+  salePrice    Float           @default(0)
+  shippingCost Float           @default(0)
+  stocks       Stock[]
+  sales        Sale[]
+  transfers    StockTransfer[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+model StorageLocation {
+  id            String          @id @default(uuid())
+  name          String
+  description   String?
+  stocks        Stock[]
+  transfersFrom StockTransfer[] @relation("FromLocation")
+  transfersTo   StockTransfer[] @relation("ToLocation")
+  sales         Sale[]
+  createdAt     DateTime        @default(now())
+}
+
+model Stock {
+  id         String          @id @default(uuid())
+  variantId  String
+  variant    ProductVariant  @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  locationId String
+  location   StorageLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  quantity   Int             @default(0)
+  updatedAt  DateTime        @updatedAt
+
+  @@unique([variantId, locationId])
+}
+
+model StockTransfer {
+  id             String          @id @default(uuid())
+  variantId      String
+  variant        ProductVariant  @relation(fields: [variantId], references: [id])
+  fromLocationId String
+  fromLocation   StorageLocation @relation("FromLocation", fields: [fromLocationId], references: [id])
+  toLocationId   String
+  toLocation     StorageLocation @relation("ToLocation", fields: [toLocationId], references: [id])
+  quantity       Int
+  notes          String?
+  createdAt      DateTime        @default(now())
+}
+
+model Sale {
+  id               String          @id @default(uuid())
+  variantId        String
+  variant          ProductVariant  @relation(fields: [variantId], references: [id])
+  locationId       String
+  location         StorageLocation @relation(fields: [locationId], references: [id])
+  quantity         Int
+  unitSalePrice    Float
+  unitCostPrice    Float
+  unitShippingCost Float
+  notes            String?
+  returns          Return[]
+  createdAt        DateTime        @default(now())
+}
+
+model Return {
+  id        String   @id @default(uuid())
+  saleId    String
+  sale      Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  quantity  Int
+  reason    String?
+  notes     String?
+  createdAt DateTime @default(now())
+}
