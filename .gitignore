@@ -7,7 +7,9 @@ stockr-backend/out/
 
 # SQLite dev DB
 stockr-backend/*.db
-stockr-backend/prisma/dev.db
+stockr-backend/*.db-journal
+stockr-backend/prisma/*.db
+stockr-backend/prisma/*.db-journal
 
 # Mobile build
 stockr-mobile/dist/
