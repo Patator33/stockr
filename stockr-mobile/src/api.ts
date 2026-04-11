@@ -90,7 +90,7 @@ export const api = {
     list: (productId?: string) => get<Variant[]>(`/api/variants${productId ? `?productId=${productId}` : ''}`),
     findByBarcode: (barcode: string) => get<Variant & { product: { id: string; name: string } }>(`/api/variants?barcode=${encodeURIComponent(barcode)}`),
     create: (data: VariantInput) => post<Variant>('/api/variants', data),
-    update: (id: string, data: Omit<VariantInput, 'productId'> & { barcode?: string | null }) => put<Variant>(`/api/variants/${id}`, data),
+    update: (id: string, data: Omit<VariantInput, 'productId'> & { barcode?: string | null; supplierRef?: string | null }) => put<Variant>(`/api/variants/${id}`, data),
     delete: (id: string) => del(`/api/variants/${id}`),
   },
   locations: {
@@ -168,6 +168,7 @@ export interface Variant {
   salePrice: number;
   shippingCost: number;
   barcode?: string | null;
+  supplierRef?: string | null;
   stocks?: StockEntry[];
   createdAt: string;
 }

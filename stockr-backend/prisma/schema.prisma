@@ -35,6 +35,7 @@ model ProductVariant {
   salePrice    Float           @default(0)
   shippingCost Float           @default(0)
   barcode      String?         @unique
+  supplierRef  String?         @unique
   stocks       Stock[]
   sales        Sale[]
   transfers    StockTransfer[]

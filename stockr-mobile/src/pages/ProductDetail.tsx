@@ -202,6 +202,13 @@ export default function ProductDetailPage() {
                     ))}
                   </div>
                 )}
+                {/* Supplier ref */}
+                <SupplierRefField
+                  variantId={v.id}
+                  value={v.supplierRef ?? ''}
+                  onSaved={load}
+                  variant={v}
+                />
                 <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   {v.barcode ? (
                     <span style={{ fontSize: '0.75rem', color: '#64748b', background: '#1e2535', border: '1px solid #2a3045', borderRadius: '0.375rem', padding: '0.125rem 0.5rem', fontFamily: 'monospace' }}>
@@ -293,5 +300,69 @@ export default function ProductDetailPage() {
         />
       )}
     </>
+  );
+}
+
+function SupplierRefField({ variantId, value, onSaved, variant }: {
+  variantId: string;
+  value: string;
+  onSaved: () => void;
+  variant: import('../api').VariantWithStocks;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(value);
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.variants.update(variantId, {
+        name: variant.name,
+        attributes: JSON.parse(variant.attributes),
+        costPrice: variant.costPrice,
+        salePrice: variant.salePrice,
+        shippingCost: variant.shippingCost,
+        barcode: variant.barcode,
+        supplierRef: val.trim() || null,
+      });
+      setEditing(false);
+      onSaved();
+    } catch { /* ignore */ } finally { setSaving(false); }
+  };
+
+  if (editing) {
+    return (
+      <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.375rem', alignItems: 'center' }}>
+        <input
+          type="text"
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          placeholder="Réf. fournisseur"
+          style={{ flex: 1, fontSize: '0.8125rem', margin: 0, padding: '0.25rem 0.5rem' }}
+          autoFocus
+          onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
+        />
+        <button onClick={save} disabled={saving} style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', background: 'rgba(34,197,94,0.15)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.375rem', cursor: 'pointer' }}>
+          {saving ? '…' : '✓'}
+        </button>
+        <button onClick={() => setEditing(false)} style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', background: 'none', color: '#64748b', border: '1px solid #2a3045', borderRadius: '0.375rem', cursor: 'pointer' }}>✕</button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: '0.375rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+      {value ? (
+        <span style={{ fontSize: '0.75rem', color: '#94a3b8', background: '#1e2535', border: '1px solid #2a3045', borderRadius: '0.375rem', padding: '0.125rem 0.5rem', fontFamily: 'monospace' }}>
+          🏭 {value}
+        </span>
+      ) : (
+        <span style={{ fontSize: '0.75rem', color: '#475569' }}>Pas de réf. fournisseur</span>
+      )}
+      <button
+        onClick={() => { setVal(value); setEditing(true); }}
+        style={{ fontSize: '0.7rem', padding: '0.125rem 0.375rem', background: 'none', color: '#475569', border: '1px solid #2a3045', borderRadius: '0.375rem', cursor: 'pointer' }}
+      >✏️</button>
+    </div>
   );
 }
