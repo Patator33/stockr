@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { App } from '@capacitor/app';
+import { LocalNotifications } from '@capacitor/local-notifications';
 import { api, type Order } from '../api';
 
 const SEEN_KEY = 'stockr_seen_orders';
@@ -14,40 +15,49 @@ function addSeenId(id: string) {
   localStorage.setItem(SEEN_KEY, JSON.stringify([...seen]));
 }
 
-async function requestPermission(): Promise<boolean> {
-  if (!('Notification' in window)) return false;
-  if (Notification.permission === 'granted') return true;
-  if (Notification.permission === 'denied') return false;
-  const result = await Notification.requestPermission();
-  return result === 'granted';
+let notifId = Date.now();
+function nextId() { return notifId++; }
+
+async function requestPermission() {
+  try {
+    const { display } = await LocalNotifications.checkPermissions();
+    if (display !== 'granted') {
+      await LocalNotifications.requestPermissions();
+    }
+  } catch { /* ignore */ }
 }
 
-function notify(title: string, body: string) {
-  if (Notification.permission === 'granted') {
-    new Notification(title, { body, icon: '/icons/icon-192.png' });
-  }
+async function notify(title: string, body: string) {
+  try {
+    await LocalNotifications.schedule({
+      notifications: [{
+        id: nextId(),
+        title,
+        body,
+        schedule: { at: new Date(Date.now() + 100) },
+        smallIcon: 'ic_launcher_foreground',
+      }],
+    });
+  } catch { /* ignore */ }
 }
 
-// Check if we should fire the 9h shipping alert
 async function check9hAlert(orders: Order[]) {
   const today = new Date().toDateString();
   const lastNotifDate = localStorage.getItem(NOTIF_9H_KEY);
   const now = new Date();
-  // Only fire between 9h00 and 9h59, once per day
   if (now.getHours() !== 9) return;
   if (lastNotifDate === today) return;
 
   const urgent = orders.filter(o => {
     if (o.status === 'shipped') return false;
     if (!o.shippingDate) return false;
-    const d = new Date(o.shippingDate);
-    return d.toDateString() === today;
+    return new Date(o.shippingDate).toDateString() === today;
   });
 
   if (urgent.length > 0) {
     localStorage.setItem(NOTIF_9H_KEY, today);
     const names = urgent.map(o => o.customerName || o.customerEmail || 'Client').join(', ');
-    notify(
+    await notify(
       `📦 ${urgent.length} commande${urgent.length > 1 ? 's' : ''} à expédier aujourd'hui`,
       names
     );
@@ -62,12 +72,9 @@ export function useNotifications() {
   }, []);
 
   useEffect(() => {
-    // Re-check 9h alert when app comes to foreground
     const handler = App.addListener('appStateChange', ({ isActive }) => {
       if (!isActive) return;
-      api.orders.list().then(orders => {
-        check9hAlert(orders);
-      }).catch(() => {});
+      api.orders.list().then(orders => check9hAlert(orders)).catch(() => {});
     });
     return () => { handler.then(h => h.remove()); };
   }, []);
@@ -88,7 +95,6 @@ export function useNotifications() {
     } else {
       pending.forEach(o => addSeenId(o.id));
       initialLoad.current = false;
-      // Check 9h on first load too
       check9hAlert(orders);
     }
   };
