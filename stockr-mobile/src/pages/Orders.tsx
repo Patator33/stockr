@@ -24,6 +24,7 @@ export default function Orders() {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState('');
+  const [scanSuccess, setScanSuccess] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
   const handleDelete = async () => {
@@ -38,6 +39,7 @@ export default function Orders() {
     if (!selectedOrder) return;
     setScanning(true);
     setScanError('');
+    setScanSuccess('');
     try {
       const code = await scanBarcode();
       if (!code) return;
@@ -53,7 +55,7 @@ export default function Orders() {
       }
 
       if (item.scanned >= item.quantity) {
-        setScanError(`${item.variantName} déjà entièrement scanné (${item.quantity}/${item.quantity})`);
+        setScanError(`${item.variantName} : déjà entièrement scanné (${item.scanned}/${item.quantity})`);
         return;
       }
 
@@ -63,6 +65,7 @@ export default function Orders() {
       // Refresh order
       const updated = await api.orders.get(selectedOrder.id);
       setSelectedOrder(updated);
+      setScanSuccess(`✓ ${item.variantName} — ${newScanned}/${item.quantity}`);
 
       // Auto-ship if all items fully scanned
       const allDone = updated.items.every(i => i.scanned >= i.quantity);
@@ -72,6 +75,8 @@ export default function Orders() {
         setSelectedOrder(shipped);
         await reload();
       }
+    } catch (e) {
+      setScanError(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setScanning(false);
     }
@@ -105,6 +110,17 @@ export default function Orders() {
             {label}
           </span>
         </div>
+
+        {scanSuccess && (
+          <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.35)', borderRadius: '0.75rem', padding: '0.75rem 1rem', marginBottom: '0.75rem', color: '#22c55e', fontSize: '0.9375rem', fontWeight: 600 }}>
+            {scanSuccess}
+          </div>
+        )}
+        {scanError && (
+          <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.75rem', padding: '0.75rem 1rem', marginBottom: '0.75rem', color: '#ef4444', fontSize: '0.875rem' }}>
+            {scanError}
+          </div>
+        )}
 
         {selectedOrder.notes && (
           <div style={{ background: 'rgba(43,140,238,0.06)', border: '1px solid rgba(43,140,238,0.2)', borderRadius: '0.75rem', padding: '0.75rem', marginBottom: '1rem', fontSize: '0.875rem', color: '#94a3b8' }}>
@@ -143,12 +159,6 @@ export default function Orders() {
             </div>
           );
         })}
-
-        {scanError && (
-          <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.75rem', padding: '0.75rem', marginTop: '0.75rem', color: '#ef4444', fontSize: '0.875rem' }}>
-            {scanError}
-          </div>
-        )}
 
         {/* Actions */}
         <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -231,7 +241,16 @@ export default function Orders() {
           return (
             <div
               key={order.id}
-              onClick={() => { setSelectedOrder(order); setScanError(''); }}
+              onClick={async () => {
+                setScanError('');
+                setScanSuccess('');
+                setSelectedOrder(order);
+                // Fetch fresh detail to get latest scanned counts
+                try {
+                  const fresh = await api.orders.get(order.id);
+                  setSelectedOrder(fresh);
+                } catch { /* keep list data */ }
+              }}
               style={{ background: '#141824', border: '1px solid #2a3045', borderRadius: '0.75rem', padding: '1rem', marginBottom: '0.75rem', cursor: 'pointer' }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
