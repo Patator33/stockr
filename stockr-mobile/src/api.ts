@@ -65,7 +65,11 @@ async function patch<T>(path: string, body: unknown): Promise<T> {
 
 async function del(path: string): Promise<void> {
   const res = await apiFetch(path, { method: 'DELETE' });
-  if (!res.ok) throw new Error(`${res.status}`);
+  if (!res.ok) {
+    let message = `${res.status}`;
+    try { const data = await res.json(); if (data.error) message = data.error; } catch { /* ignore */ }
+    throw new Error(message);
+  }
 }
 
 // Auth

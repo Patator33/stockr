@@ -26,6 +26,22 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   try { await requireAuth(req); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
   const { id } = await params;
   try {
+    const salesCount = await prisma.sale.count({ where: { variantId: id } });
+    if (salesCount > 0) {
+      return NextResponse.json(
+        { error: `Impossible de supprimer : ${salesCount} vente(s) associée(s). Supprimez d'abord les ventes.` },
+        { status: 409 }
+      );
+    }
+    const transfersCount = await prisma.stockTransfer.count({ where: { variantId: id } });
+    if (transfersCount > 0) {
+      return NextResponse.json(
+        { error: `Impossible de supprimer : ${transfersCount} transfert(s) associé(s).` },
+        { status: 409 }
+      );
+    }
+    // Détacher les commandes (variantId nullable)
+    await prisma.orderItem.updateMany({ where: { variantId: id }, data: { variantId: null } });
     await prisma.productVariant.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch (e) {
