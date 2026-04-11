@@ -35,8 +35,9 @@ export async function POST(req: NextRequest) {
 
   console.log('[orders POST] body:', JSON.stringify(body));
 
-  const { customerName, customerEmail, notes, source, items } = body as {
+  const { customerName, customerEmail, notes, source, shippingDate, items } = body as {
     customerName?: string; customerEmail?: string; notes?: string; source?: string;
+    shippingDate?: string;
     items?: { barcode?: string; supplierRef?: string; variantName?: string; quantity: number }[];
   };
 
@@ -79,6 +80,7 @@ export async function POST(req: NextRequest) {
         customerEmail: customerEmail || null,
         notes: notes || null,
         source: source || 'n8n',
+        shippingDate: shippingDate ? new Date(shippingDate) : null,
         items: { create: resolvedItems },
       },
       include: {

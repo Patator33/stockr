@@ -112,6 +112,7 @@ model Order {
   customerEmail   String?
   notes           String?
   status          String      @default("pending")
+  shippingDate    DateTime?
   items           OrderItem[]
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt

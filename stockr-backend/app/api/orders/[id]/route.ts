@@ -23,11 +23,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const body = await req.json();
 
-  // Update order status
-  if (body.status !== undefined) {
+  // Update order status and/or shippingDate
+  if (body.status !== undefined || body.shippingDate !== undefined) {
+    const data: Record<string, unknown> = {};
+    if (body.status !== undefined) data.status = body.status;
+    if (body.shippingDate !== undefined) data.shippingDate = body.shippingDate ? new Date(body.shippingDate) : null;
     const order = await prisma.order.update({
       where: { id },
-      data: { status: body.status },
+      data,
       include: { items: { include: { variant: { include: { product: true } } } } },
     });
     return NextResponse.json(order);
