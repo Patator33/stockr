@@ -15,8 +15,8 @@ function addSeenId(id: string) {
   localStorage.setItem(SEEN_KEY, JSON.stringify([...seen]));
 }
 
-let notifId = Date.now();
-function nextId() { return notifId++; }
+let notifId = Math.floor(Math.random() * 10000);
+function nextId() { return (notifId++ % 2147483647); }
 
 async function ensureChannelAndPermission(): Promise<boolean> {
   try {
@@ -40,17 +40,19 @@ async function ensureChannelAndPermission(): Promise<boolean> {
 async function notify(title: string, body: string) {
   try {
     const ok = await ensureChannelAndPermission();
-    if (!ok) return;
+    if (!ok) { log('notify: permission refusée'); return; }
     await LocalNotifications.schedule({
       notifications: [{
         id: nextId(),
         title,
         body,
         channelId: 'stockr_orders',
-        schedule: { at: new Date(Date.now() + 500) },
+        schedule: { at: new Date(Date.now() + 1000) },
       }],
     });
+    log(`notify: schedulé "${title}"`);
   } catch (e) {
+    log(`notify error: ${e instanceof Error ? e.message : String(e)}`);
     console.error('[notify] error:', e);
   }
 }
