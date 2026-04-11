@@ -25,48 +25,72 @@ export async function POST(req: NextRequest) {
     try { await requireAuth(req); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
   }
 
-  const body = await req.json();
-  const { customerName, customerEmail, notes, source, items } = body;
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch (e) {
+    console.error('[orders POST] Invalid JSON body:', e);
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  console.log('[orders POST] body:', JSON.stringify(body));
+
+  const { customerName, customerEmail, notes, source, items } = body as {
+    customerName?: string; customerEmail?: string; notes?: string; source?: string;
+    items?: { barcode?: string; supplierRef?: string; variantName?: string; quantity: number }[];
+  };
 
   if (!items || !Array.isArray(items) || items.length === 0) {
     return NextResponse.json({ error: 'items requis' }, { status: 400 });
   }
 
-  // Resolve variants by barcode or name
-  const resolvedItems = await Promise.all(
-    items.map(async (item: { barcode?: string; supplierRef?: string; variantName?: string; quantity: number }) => {
-      let variantId: string | null = null;
-      let resolvedName = item.variantName || item.supplierRef || item.barcode || 'Article';
-      // Resolve by supplierRef first, then barcode
-      if (item.supplierRef) {
-        const v = await prisma.productVariant.findUnique({ where: { supplierRef: item.supplierRef }, include: { product: true } });
-        if (v) { variantId = v.id; resolvedName = item.variantName || v.name; }
-      }
-      if (!variantId && item.barcode) {
-        const v = await prisma.productVariant.findUnique({ where: { barcode: item.barcode }, include: { product: true } });
-        if (v) { variantId = v.id; resolvedName = item.variantName || v.name; }
-      }
-      return {
-        barcode: item.barcode || null,
-        variantName: resolvedName,
-        quantity: Number(item.quantity) || 1,
-        variantId,
-      };
-    })
-  );
+  try {
+    // Resolve variants by supplierRef or barcode
+    const resolvedItems = await Promise.all(
+      items.map(async (item) => {
+        let variantId: string | null = null;
+        let resolvedName = item.variantName || item.supplierRef || item.barcode || 'Article';
+        if (item.supplierRef) {
+          console.log('[orders POST] resolving by supplierRef:', item.supplierRef);
+          const v = await prisma.productVariant.findUnique({ where: { supplierRef: item.supplierRef }, include: { product: true } });
+          if (v) { variantId = v.id; resolvedName = item.variantName || v.name; }
+          else console.warn('[orders POST] no variant found for supplierRef:', item.supplierRef);
+        }
+        if (!variantId && item.barcode) {
+          console.log('[orders POST] resolving by barcode:', item.barcode);
+          const v = await prisma.productVariant.findUnique({ where: { barcode: item.barcode }, include: { product: true } });
+          if (v) { variantId = v.id; resolvedName = item.variantName || v.name; }
+          else console.warn('[orders POST] no variant found for barcode:', item.barcode);
+        }
+        return {
+          barcode: item.barcode || null,
+          variantName: resolvedName,
+          quantity: Number(item.quantity) || 1,
+          variantId,
+        };
+      })
+    );
 
-  const order = await prisma.order.create({
-    data: {
-      customerName: customerName || null,
-      customerEmail: customerEmail || null,
-      notes: notes || null,
-      source: source || 'n8n',
-      items: { create: resolvedItems },
-    },
-    include: {
-      items: { include: { variant: { include: { product: true } } } },
-    },
-  });
+    console.log('[orders POST] resolvedItems:', JSON.stringify(resolvedItems));
 
-  return NextResponse.json(order, { status: 201 });
+    const order = await prisma.order.create({
+      data: {
+        customerName: customerName || null,
+        customerEmail: customerEmail || null,
+        notes: notes || null,
+        source: source || 'n8n',
+        items: { create: resolvedItems },
+      },
+      include: {
+        items: { include: { variant: { include: { product: true } } } },
+      },
+    });
+
+    console.log('[orders POST] created order:', order.id);
+    return NextResponse.json(order, { status: 201 });
+  } catch (e) {
+    console.error('[orders POST] error:', e);
+    const message = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
