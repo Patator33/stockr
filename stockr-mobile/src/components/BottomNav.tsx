@@ -5,7 +5,7 @@ const tabs = [
   { to: '/', label: 'Stocks', icon: '📦' },
   { to: '/orders', label: 'Commandes', icon: '📋' },
   { to: '/sales', label: 'Ventes', icon: '💰' },
-  { to: '/stats', label: 'Stats', icon: '📊' },
+  { to: '/manage', label: 'Gestion', icon: '⚙️' },
   { to: '/settings', label: 'Réglages', icon: '🔧' },
 ];
 

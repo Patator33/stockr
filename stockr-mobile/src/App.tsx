@@ -15,7 +15,7 @@ import ProductDetail from './pages/ProductDetail';
 import Locations from './pages/Locations';
 import Settings from './pages/Settings';
 
-const TABS = ['/', '/orders', '/sales', '/stats', '/settings'];
+const TABS = ['/', '/orders', '/sales', '/manage', '/settings'];
 
 function AppShell({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
