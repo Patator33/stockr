@@ -34,20 +34,21 @@ export async function POST(req: NextRequest) {
 
   // Resolve variants by barcode or name
   const resolvedItems = await Promise.all(
-    items.map(async (item: { barcode?: string; supplierRef?: string; variantName: string; quantity: number }) => {
+    items.map(async (item: { barcode?: string; supplierRef?: string; variantName?: string; quantity: number }) => {
       let variantId: string | null = null;
+      let resolvedName = item.variantName || item.supplierRef || item.barcode || 'Article';
       // Resolve by supplierRef first, then barcode
       if (item.supplierRef) {
-        const v = await prisma.productVariant.findUnique({ where: { supplierRef: item.supplierRef } });
-        if (v) variantId = v.id;
+        const v = await prisma.productVariant.findUnique({ where: { supplierRef: item.supplierRef }, include: { product: true } });
+        if (v) { variantId = v.id; resolvedName = item.variantName || v.name; }
       }
       if (!variantId && item.barcode) {
-        const v = await prisma.productVariant.findUnique({ where: { barcode: item.barcode } });
-        if (v) variantId = v.id;
+        const v = await prisma.productVariant.findUnique({ where: { barcode: item.barcode }, include: { product: true } });
+        if (v) { variantId = v.id; resolvedName = item.variantName || v.name; }
       }
       return {
         barcode: item.barcode || null,
-        variantName: item.variantName,
+        variantName: resolvedName,
         quantity: Number(item.quantity) || 1,
         variantId,
       };
