@@ -1,30 +1,62 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api, type Order } from '../api';
-import { useNotifications } from './useNotifications';
+import { checkNewOrders } from './useNotifications';
 
 const POLL_INTERVAL = 30_000;
 
-export function useOrders() {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [pendingCount, setPendingCount] = useState(0);
-  const { checkNewOrders } = useNotifications();
-  const initialized = useRef(false);
+// Shared state — only one polling loop across all consumers
+let sharedOrders: Order[] = [];
+let sharedPendingCount = 0;
+let initialized = false;
+const listeners = new Set<() => void>();
 
-  const fetchOrders = useCallback(async () => {
-    try {
-      const all = await api.orders.list();
-      setOrders(all);
-      setPendingCount(all.filter(o => o.status === 'pending').length);
-      checkNewOrders(all);
-      initialized.current = true;
-    } catch { /* ignore if not authenticated yet */ }
-  }, []);
+function notify() { listeners.forEach(fn => fn()); }
+
+async function fetchOnce() {
+  try {
+    const all = await api.orders.list();
+    checkNewOrders(all, initialized);
+    initialized = true;
+    sharedOrders = all;
+    sharedPendingCount = all.filter(o => o.status === 'pending').length;
+    notify();
+  } catch { /* ignore */ }
+}
+
+let pollingInterval: ReturnType<typeof setInterval> | null = null;
+let pollingRefCount = 0;
+
+function startPolling() {
+  pollingRefCount++;
+  if (pollingInterval === null) {
+    fetchOnce();
+    pollingInterval = setInterval(fetchOnce, POLL_INTERVAL);
+  }
+}
+
+function stopPolling() {
+  pollingRefCount--;
+  if (pollingRefCount <= 0 && pollingInterval !== null) {
+    clearInterval(pollingInterval);
+    pollingInterval = null;
+    pollingRefCount = 0;
+  }
+}
+
+export function useOrders() {
+  const [, rerender] = useState(0);
 
   useEffect(() => {
-    fetchOrders();
-    const interval = setInterval(fetchOrders, POLL_INTERVAL);
-    return () => clearInterval(interval);
-  }, [fetchOrders]);
+    const listener = () => rerender(n => n + 1);
+    listeners.add(listener);
+    startPolling();
+    return () => {
+      listeners.delete(listener);
+      stopPolling();
+    };
+  }, []);
 
-  return { orders, pendingCount, reload: fetchOrders };
+  const reload = useCallback(async () => { await fetchOnce(); }, []);
+
+  return { orders: sharedOrders, pendingCount: sharedPendingCount, reload };
 }

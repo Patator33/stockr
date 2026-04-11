@@ -18,26 +18,29 @@ function addSeenId(id: string) {
 let notifId = Date.now();
 function nextId() { return notifId++; }
 
-async function requestPermission() {
+async function ensureChannelAndPermission(): Promise<boolean> {
   try {
     const { display } = await LocalNotifications.checkPermissions();
     if (display !== 'granted') {
-      await LocalNotifications.requestPermissions();
+      const req = await LocalNotifications.requestPermissions();
+      if (req.display !== 'granted') return false;
     }
-    // Create notification channel (required Android 8+)
     await LocalNotifications.createChannel({
       id: 'stockr_orders',
       name: 'Commandes',
       description: 'Nouvelles commandes et alertes expédition',
-      importance: 5, // IMPORTANCE_HIGH
+      importance: 5,
       visibility: 1,
       vibration: true,
     });
-  } catch { /* ignore */ }
+    return true;
+  } catch { return false; }
 }
 
 async function notify(title: string, body: string) {
   try {
+    const ok = await ensureChannelAndPermission();
+    if (!ok) return;
     await LocalNotifications.schedule({
       notifications: [{
         id: nextId(),
@@ -75,11 +78,30 @@ async function check9hAlert(orders: Order[]) {
   }
 }
 
-export function useNotifications() {
-  const initialLoad = useRef(true);
+// Standalone — called from useOrders singleton
+export function checkNewOrders(orders: Order[], alreadyInitialized: boolean) {
+  const pending = orders.filter(o => o.status === 'pending');
+  const seen = getSeenIds();
 
+  if (alreadyInitialized) {
+    const newOrders = pending.filter(o => !seen.has(o.id));
+    for (const order of newOrders) {
+      addSeenId(order.id);
+      notify(
+        '📋 Nouvelle commande',
+        `${order.customerName || order.customerEmail || 'Client'} — ${order.items.length} article${order.items.length > 1 ? 's' : ''}`
+      );
+    }
+  } else {
+    // First load — mark all as seen, no notification
+    pending.forEach(o => addSeenId(o.id));
+    check9hAlert(orders);
+  }
+}
+
+export function useNotifications() {
   useEffect(() => {
-    requestPermission();
+    ensureChannelAndPermission();
   }, []);
 
   useEffect(() => {
@@ -89,26 +111,4 @@ export function useNotifications() {
     });
     return () => { handler.then(h => h.remove()); };
   }, []);
-
-  const checkNewOrders = (orders: Order[]) => {
-    const pending = orders.filter(o => o.status === 'pending');
-    const seen = getSeenIds();
-
-    if (!initialLoad.current) {
-      const newOrders = pending.filter(o => !seen.has(o.id));
-      for (const order of newOrders) {
-        addSeenId(order.id);
-        notify(
-          '📋 Nouvelle commande',
-          `${order.customerName || order.customerEmail || 'Client'} — ${order.items.length} article${order.items.length > 1 ? 's' : ''}`
-        );
-      }
-    } else {
-      pending.forEach(o => addSeenId(o.id));
-      initialLoad.current = false;
-      check9hAlert(orders);
-    }
-  };
-
-  return { checkNewOrders };
 }

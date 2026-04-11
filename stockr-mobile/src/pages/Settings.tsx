@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { LocalNotifications } from '@capacitor/local-notifications';
 import { getServerUrl, setServerUrl, clearToken } from '../api';
 
 export default function Settings() {
@@ -16,6 +17,39 @@ export default function Settings() {
     await setServerUrl(serverUrl);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const [notifStatus, setNotifStatus] = useState('');
+
+  const handleTestNotif = async () => {
+    setNotifStatus('…');
+    try {
+      const perm = await LocalNotifications.checkPermissions();
+      setNotifStatus(`Permission: ${perm.display}`);
+      if (perm.display !== 'granted') {
+        const req = await LocalNotifications.requestPermissions();
+        setNotifStatus(`Après demande: ${req.display}`);
+        if (req.display !== 'granted') return;
+      }
+      await LocalNotifications.createChannel({
+        id: 'stockr_orders',
+        name: 'Commandes',
+        importance: 5,
+        vibration: true,
+      });
+      await LocalNotifications.schedule({
+        notifications: [{
+          id: Math.floor(Math.random() * 100000),
+          title: '🧪 Test Stockr',
+          body: 'Notifications fonctionnelles !',
+          channelId: 'stockr_orders',
+          schedule: { at: new Date(Date.now() + 1000) },
+        }],
+      });
+      setNotifStatus('✓ Notif envoyée — tu devrais la recevoir dans 1s');
+    } catch (e) {
+      setNotifStatus(`Erreur: ${e instanceof Error ? e.message : String(e)}`);
+    }
   };
 
   const handleLogout = async () => {
@@ -45,6 +79,18 @@ export default function Settings() {
           {saved ? '✓ Sauvegardé' : 'Sauvegarder'}
         </button>
       </form>
+
+      <div style={{ borderTop: '1px solid #2a3045', paddingTop: '1.5rem', marginBottom: '1.5rem' }}>
+        <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', margin: '0 0 0.75rem' }}>Notifications</h2>
+        <button onClick={handleTestNotif} className="btn-ghost" style={{ width: '100%' }}>
+          🔔 Envoyer une notification test
+        </button>
+        {notifStatus && (
+          <p style={{ marginTop: '0.5rem', fontSize: '0.8125rem', color: notifStatus.startsWith('✓') ? '#22c55e' : notifStatus.startsWith('Erreur') ? '#ef4444' : '#94a3b8' }}>
+            {notifStatus}
+          </p>
+        )}
+      </div>
 
       <div style={{ borderTop: '1px solid #2a3045', paddingTop: '1.5rem' }}>
         <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', margin: '0 0 1rem' }}>Compte</h2>

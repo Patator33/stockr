@@ -2,6 +2,7 @@ import { useRef, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { App as CapApp } from '@capacitor/app';
 import AuthGuard from './components/AuthGuard';
+import { useNotifications } from './hooks/useNotifications';
 import BottomNav from './components/BottomNav';
 import Login from './pages/Login';
 import Setup from './pages/Setup';
@@ -72,6 +73,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  useNotifications();
   return (
     <BrowserRouter>
       <Routes>
