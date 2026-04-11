@@ -6,21 +6,23 @@ import { prisma } from '@/lib/prisma';
 export async function POST(req: NextRequest) {
   try { await requireAuth(req); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
 
-  const { items } = await req.json() as {
+  const { items, locationId: reqLocationId } = await req.json() as {
     items: { variantId: string; quantity: number }[];
+    locationId?: string;
   };
 
   if (!items || !Array.isArray(items) || items.length === 0) {
     return NextResponse.json({ error: 'items requis' }, { status: 400 });
   }
 
-  // Find default location
-  const defaultLocation = await prisma.storageLocation.findFirst({ where: { isDefault: true } });
-  if (!defaultLocation) {
-    return NextResponse.json({ error: 'Aucune zone de stockage par défaut définie' }, { status: 400 });
+  let locationId = reqLocationId;
+  if (!locationId) {
+    const defaultLocation = await prisma.storageLocation.findFirst({ where: { isDefault: true } });
+    if (!defaultLocation) {
+      return NextResponse.json({ error: 'Aucune zone de stockage par défaut définie' }, { status: 400 });
+    }
+    locationId = defaultLocation.id;
   }
-
-  const locationId = defaultLocation.id;
 
   await prisma.$transaction(
     items
