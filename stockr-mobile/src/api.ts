@@ -101,6 +101,7 @@ export const api = {
     list: () => get<Location[]>('/api/locations'),
     create: (data: { name: string; description?: string }) => post<Location>('/api/locations', data),
     update: (id: string, data: { name: string; description?: string }) => put<Location>(`/api/locations/${id}`, data),
+    setDefault: (id: string) => patch<Location>(`/api/locations/${id}`, { isDefault: true }),
     delete: (id: string) => del(`/api/locations/${id}`),
   },
   stocks: {
@@ -132,6 +133,8 @@ export const api = {
     updateStatus: (id: string, status: string) => patch<Order>(`/api/orders/${id}`, { status }),
     updateItemScanned: (orderId: string, itemId: string, scanned: number) =>
       patch<OrderItem>(`/api/orders/${orderId}`, { itemId, scanned }),
+    updateLocation: (orderId: string, locationId: string) =>
+      patch<Order>(`/api/orders/${orderId}`, { locationId }),
     delete: (id: string) => del(`/api/orders/${id}`),
   },
   stats: {
@@ -194,6 +197,7 @@ export interface Location {
   id: string;
   name: string;
   description?: string;
+  isDefault?: boolean;
   createdAt: string;
 }
 
@@ -311,6 +315,7 @@ export interface Order {
   notes?: string | null;
   status: string; // pending | confirmed | prepared | shipped
   shippingDate?: string | null;
+  locationId?: string | null;
   items: OrderItem[];
   createdAt: string;
   updatedAt: string;

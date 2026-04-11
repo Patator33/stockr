@@ -51,6 +51,11 @@ export default function Locations() {
     try { await api.locations.delete(deleteTarget.id); setDeleteTarget(null); await load(); } catch { /* ignore */ }
   };
 
+  const handleSetDefault = async (loc: Location) => {
+    if (loc.isDefault) return;
+    try { await api.locations.setDefault(loc.id); await load(); } catch { /* ignore */ }
+  };
+
   return (
     <>
       <PullToRefresh onRefresh={load}>
@@ -64,12 +69,26 @@ export default function Locations() {
           </div>
 
           {locations.map(loc => (
-            <div key={loc.id} style={{ background: '#141824', border: '1px solid #2a3045', borderRadius: '0.75rem', padding: '1rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center' }}>
+            <div key={loc.id} style={{ background: '#141824', border: `1px solid ${loc.isDefault ? 'rgba(34,197,94,0.35)' : '#2a3045'}`, borderRadius: '0.75rem', padding: '1rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ margin: 0, fontWeight: 600, color: '#e2e8f0' }}>{loc.name}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <p style={{ margin: 0, fontWeight: 600, color: '#e2e8f0' }}>{loc.name}</p>
+                  {loc.isDefault && (
+                    <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#22c55e', background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '9999px', padding: '0.1rem 0.5rem' }}>
+                      Par défaut
+                    </span>
+                  )}
+                </div>
                 {loc.description && <p style={{ margin: '0.125rem 0 0', fontSize: '0.8125rem', color: '#64748b' }}>{loc.description}</p>}
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem', marginLeft: '0.75rem' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', marginLeft: '0.75rem', alignItems: 'center' }}>
+                <button
+                  onClick={() => handleSetDefault(loc)}
+                  title="Définir par défaut"
+                  style={{ fontSize: '1.125rem', lineHeight: 1, padding: '0.25rem', background: 'none', border: 'none', cursor: loc.isDefault ? 'default' : 'pointer', opacity: loc.isDefault ? 1 : 0.35 }}
+                >
+                  ★
+                </button>
                 <button className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }} onClick={() => openEdit(loc)}>✏️</button>
                 <button className="btn-danger" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }} onClick={() => setDeleteTarget(loc)}>✕</button>
               </div>

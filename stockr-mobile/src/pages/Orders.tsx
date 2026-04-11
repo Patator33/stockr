@@ -28,6 +28,10 @@ export default function Orders() {
   const [scanError, setScanError] = useState('');
   const [scanSuccess, setScanSuccess] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [locations, setLocations] = useState<import('../api').Location[]>([]);
+
+  // Load locations once
+  useEffect(() => { api.locations.list().then(setLocations).catch(() => {}); }, []);
 
   // Open order directly if navigated from dashboard
   useEffect(() => {
@@ -158,6 +162,26 @@ export default function Orders() {
         {selectedOrder.notes && (
           <div style={{ background: 'rgba(43,140,238,0.06)', border: '1px solid rgba(43,140,238,0.2)', borderRadius: '0.75rem', padding: '0.75rem', marginBottom: '1rem', fontSize: '0.875rem', color: '#94a3b8' }}>
             {selectedOrder.notes}
+          </div>
+        )}
+
+        {/* Location picker */}
+        {locations.length > 0 && selectedOrder.status !== 'shipped' && (
+          <div style={{ background: '#141824', border: '1px solid #2a3045', borderRadius: '0.75rem', padding: '0.625rem 0.875rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+            <span style={{ fontSize: '0.8125rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>🏭 Lieu de déstockage</span>
+            <select
+              value={selectedOrder.locationId || locations.find(l => l.isDefault)?.id || ''}
+              onChange={async e => {
+                const updated = await api.orders.updateLocation(selectedOrder.id, e.target.value);
+                setSelectedOrder(updated);
+              }}
+              style={{ flex: 1, margin: 0, fontSize: '0.8125rem' }}
+            >
+              <option value="">Choisir…</option>
+              {locations.map(l => (
+                <option key={l.id} value={l.id}>{l.name}{l.isDefault ? ' ★' : ''}</option>
+              ))}
+            </select>
           </div>
         )}
 
