@@ -33,6 +33,16 @@ export default function Orders() {
   // Load locations once
   useEffect(() => { api.locations.list().then(setLocations).catch(() => {}); }, []);
 
+  // Auto-set default location on order if not set
+  useEffect(() => {
+    if (!selectedOrder || selectedOrder.locationId || selectedOrder.status === 'shipped' || locations.length === 0) return;
+    const defaultLoc = locations.find(l => l.isDefault);
+    if (!defaultLoc) return;
+    api.orders.updateLocation(selectedOrder.id, defaultLoc.id)
+      .then(updated => setSelectedOrder(updated))
+      .catch(() => {});
+  }, [selectedOrder?.id, locations]);
+
   // Open order directly if navigated from dashboard
   useEffect(() => {
     const orderId = (location.state as { orderId?: string } | null)?.orderId;

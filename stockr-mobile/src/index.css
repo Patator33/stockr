@@ -26,7 +26,7 @@ html, body, #root {
 }
 
 .pb-nav {
-  padding-bottom: calc(4rem + env(safe-area-inset-bottom) + 0.5rem);
+  padding-bottom: calc(4.5rem + env(safe-area-inset-bottom)) !important;
 }
 
 /* Scrollable page container */
