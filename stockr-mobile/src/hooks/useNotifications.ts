@@ -24,6 +24,15 @@ async function requestPermission() {
     if (display !== 'granted') {
       await LocalNotifications.requestPermissions();
     }
+    // Create notification channel (required Android 8+)
+    await LocalNotifications.createChannel({
+      id: 'stockr_orders',
+      name: 'Commandes',
+      description: 'Nouvelles commandes et alertes expédition',
+      importance: 5, // IMPORTANCE_HIGH
+      visibility: 1,
+      vibration: true,
+    });
   } catch { /* ignore */ }
 }
 
@@ -34,11 +43,13 @@ async function notify(title: string, body: string) {
         id: nextId(),
         title,
         body,
-        schedule: { at: new Date(Date.now() + 100) },
-        smallIcon: 'ic_launcher_foreground',
+        channelId: 'stockr_orders',
+        schedule: { at: new Date(Date.now() + 500) },
       }],
     });
-  } catch { /* ignore */ }
+  } catch (e) {
+    console.error('[notify] error:', e);
+  }
 }
 
 async function check9hAlert(orders: Order[]) {
