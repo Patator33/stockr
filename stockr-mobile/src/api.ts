@@ -309,7 +309,8 @@ export interface Order {
   customerName?: string | null;
   customerEmail?: string | null;
   notes?: string | null;
-  status: string; // pending | confirmed | shipped
+  status: string; // pending | confirmed | prepared | shipped
+  shippingDate?: string | null;
   items: OrderItem[];
   createdAt: string;
   updatedAt: string;

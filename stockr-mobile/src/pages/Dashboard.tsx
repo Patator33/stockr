@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, type Product, type StockByLocation, type Location, type Variant, type Stats } from '../api';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
+import { useOrders } from '../hooks/useOrders';
 import PullToRefresh from '../components/PullToRefresh';
 
 interface AddStockModal {
@@ -31,6 +33,9 @@ function fmt(n: number) {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
+  const { orders } = useOrders();
+  const activeOrders = orders.filter(o => o.status === 'pending' || o.status === 'prepared');
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [stocks, setStocks] = useState<StockByLocation[]>([]);
@@ -190,6 +195,37 @@ export default function Dashboard() {
               Stock<span style={{ color: '#2b8cee' }}>r</span>
             </h1>
           </div>
+
+          {/* Pending orders widget */}
+          {activeOrders.length > 0 && (
+            <div
+              onClick={() => activeOrders.length === 1
+                ? navigate('/orders', { state: { orderId: activeOrders[0].id } })
+                : navigate('/orders')
+              }
+              style={{ background: 'rgba(251,146,60,0.07)', border: '1px solid rgba(251,146,60,0.3)', borderRadius: '0.75rem', padding: '0.875rem 1rem', marginBottom: '1rem', cursor: 'pointer' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: activeOrders.length > 1 ? '0.5rem' : 0 }}>
+                <span style={{ fontWeight: 700, color: '#fb923c', fontSize: '0.9375rem' }}>
+                  📋 {activeOrders.length} commande{activeOrders.length > 1 ? 's' : ''} en cours
+                </span>
+                <span style={{ color: '#fb923c', fontSize: '1rem' }}>›</span>
+              </div>
+              {activeOrders.map(o => {
+                const isPrepared = o.status === 'prepared';
+                return (
+                  <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 600, color: isPrepared ? '#818cf8' : '#f59e0b', background: isPrepared ? 'rgba(129,140,248,0.12)' : 'rgba(245,158,11,0.12)', borderRadius: '9999px', padding: '0.1rem 0.5rem' }}>
+                      {isPrepared ? 'Préparée' : 'En attente'}
+                    </span>
+                    <span style={{ fontSize: '0.8125rem', color: '#e2e8f0' }}>
+                      {o.customerName || o.customerEmail || 'Client'} — {o.items.length} article{o.items.length > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Product selector */}
           {products.length > 0 && (

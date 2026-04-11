@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useCallback, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { api, type Order, type OrderItem } from '../api';
 import { scanBarcode } from '../components/BarcodeScanner';
 import PullToRefresh from '../components/PullToRefresh';
@@ -9,6 +9,7 @@ import { useOrders } from '../hooks/useOrders';
 function statusLabel(s: string) {
   if (s === 'pending') return { label: 'En attente', color: '#f59e0b' };
   if (s === 'confirmed') return { label: 'Confirmée', color: '#2b8cee' };
+  if (s === 'prepared') return { label: 'Préparée', color: '#818cf8' };
   if (s === 'shipped') return { label: 'Expédiée', color: '#22c55e' };
   return { label: s, color: '#64748b' };
 }
@@ -19,6 +20,7 @@ function fmtDate(d: string) {
 
 export default function Orders() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { orders, reload } = useOrders();
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
@@ -26,6 +28,18 @@ export default function Orders() {
   const [scanError, setScanError] = useState('');
   const [scanSuccess, setScanSuccess] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+
+  // Open order directly if navigated from dashboard
+  useEffect(() => {
+    const orderId = (location.state as { orderId?: string } | null)?.orderId;
+    if (orderId && orders.length > 0) {
+      const order = orders.find(o => o.id === orderId);
+      if (order) {
+        api.orders.get(orderId).then(fresh => setSelectedOrder(fresh)).catch(() => setSelectedOrder(order));
+        navigate('/orders', { replace: true, state: {} });
+      }
+    }
+  }, [location.state, orders]);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -44,13 +58,27 @@ export default function Orders() {
       const code = await scanBarcode();
       if (!code) return;
 
-      // Find matching item in order by barcode or variant barcode
-      const item = selectedOrder.items.find(i =>
+      // 1. Direct match on OrderItem.barcode or linked variant barcode
+      let item = selectedOrder.items.find(i =>
         i.barcode === code || i.variant?.barcode === code
       );
 
+      // 2. Fallback: lookup variant by barcode via API, match by variantId
       if (!item) {
-        setScanError(`Code barre non reconnu dans cette commande : ${code}`);
+        try {
+          const variant = await api.variants.findByBarcode(code);
+          if (variant) {
+            item = selectedOrder.items.find(i => i.variantId === variant.id);
+          }
+        } catch { /* variant not found in DB */ }
+      }
+
+      if (!item) {
+        const expected = selectedOrder.items
+          .map(i => i.variant?.barcode || i.barcode)
+          .filter(Boolean)
+          .join(', ');
+        setScanError(`Code barre non reconnu : ${code}${expected ? ` (attendus : ${expected})` : ''}`);
         return;
       }
 
@@ -67,12 +95,12 @@ export default function Orders() {
       setSelectedOrder(updated);
       setScanSuccess(`✓ ${item.variantName} — ${newScanned}/${item.quantity}`);
 
-      // Auto-ship if all items fully scanned
+      // Auto-set to "prepared" if all items fully scanned
       const allDone = updated.items.every(i => i.scanned >= i.quantity);
-      if (allDone && updated.status !== 'shipped') {
-        await api.orders.updateStatus(updated.id, 'shipped');
-        const shipped = await api.orders.get(updated.id);
-        setSelectedOrder(shipped);
+      if (allDone && updated.status !== 'prepared' && updated.status !== 'shipped') {
+        await api.orders.updateStatus(updated.id, 'prepared');
+        const prepared = await api.orders.get(updated.id);
+        setSelectedOrder(prepared);
         await reload();
       }
     } catch (e) {
@@ -122,6 +150,11 @@ export default function Orders() {
           </div>
         )}
 
+        {selectedOrder.shippingDate && (
+          <div style={{ background: 'rgba(129,140,248,0.06)', border: '1px solid rgba(129,140,248,0.2)', borderRadius: '0.75rem', padding: '0.625rem 0.875rem', marginBottom: '0.75rem', fontSize: '0.8125rem', color: '#818cf8' }}>
+            📅 Expédition prévue : {new Date(selectedOrder.shippingDate).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+          </div>
+        )}
         {selectedOrder.notes && (
           <div style={{ background: 'rgba(43,140,238,0.06)', border: '1px solid rgba(43,140,238,0.2)', borderRadius: '0.75rem', padding: '0.75rem', marginBottom: '1rem', fontSize: '0.875rem', color: '#94a3b8' }}>
             {selectedOrder.notes}
@@ -181,7 +214,7 @@ export default function Orders() {
             </button>
           )}
 
-          {allScanned && selectedOrder.status !== 'shipped' && (
+          {selectedOrder.status === 'prepared' && (
             <button
               onClick={async () => {
                 await api.orders.updateStatus(selectedOrder.id, 'shipped');
