@@ -78,15 +78,28 @@ async function check9hAlert(orders: Order[]) {
   }
 }
 
+// Debug log accessible from Settings
+const debugLogs: string[] = [];
+export function getDebugLogs() { return [...debugLogs]; }
+function log(msg: string) {
+  const line = `${new Date().toLocaleTimeString('fr-FR')} ${msg}`;
+  debugLogs.unshift(line);
+  if (debugLogs.length > 20) debugLogs.pop();
+  console.log('[Notif]', msg);
+}
+
 // Standalone — called from useOrders singleton
 export function checkNewOrders(orders: Order[], alreadyInitialized: boolean) {
   const pending = orders.filter(o => o.status === 'pending');
   const seen = getSeenIds();
+  log(`poll: ${orders.length} commandes, ${pending.length} pending, initialized=${alreadyInitialized}, seen=${seen.size}`);
 
   if (alreadyInitialized) {
     const newOrders = pending.filter(o => !seen.has(o.id));
+    log(`nouvelles: ${newOrders.length} (ids: ${newOrders.map(o => o.id.slice(0,6)).join(',')})`);
     for (const order of newOrders) {
       addSeenId(order.id);
+      log(`notif envoyée pour ${order.id.slice(0,6)}`);
       notify(
         '📋 Nouvelle commande',
         `${order.customerName || order.customerEmail || 'Client'} — ${order.items.length} article${order.items.length > 1 ? 's' : ''}`
@@ -95,6 +108,7 @@ export function checkNewOrders(orders: Order[], alreadyInitialized: boolean) {
   } else {
     // First load — mark all as seen, no notification
     pending.forEach(o => addSeenId(o.id));
+    log(`init: ${pending.length} commandes marquées comme vues`);
     check9hAlert(orders);
   }
 }

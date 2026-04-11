@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { getServerUrl, setServerUrl, clearToken } from '../api';
+import { getDebugLogs } from '../hooks/useNotifications';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -20,6 +21,8 @@ export default function Settings() {
   };
 
   const [notifStatus, setNotifStatus] = useState('');
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [showDebug, setShowDebug] = useState(false);
 
   const handleTestNotif = async () => {
     setNotifStatus('…');
@@ -89,6 +92,22 @@ export default function Settings() {
           <p style={{ marginTop: '0.5rem', fontSize: '0.8125rem', color: notifStatus.startsWith('✓') ? '#22c55e' : notifStatus.startsWith('Erreur') ? '#ef4444' : '#94a3b8' }}>
             {notifStatus}
           </p>
+        )}
+        <button
+          onClick={() => { setDebugLogs(getDebugLogs()); setShowDebug(true); }}
+          style={{ marginTop: '0.5rem', background: 'none', border: '1px solid #2a3045', borderRadius: '0.5rem', color: '#64748b', fontSize: '0.75rem', padding: '0.375rem 0.75rem', cursor: 'pointer', width: '100%' }}
+        >
+          🔍 Voir logs polling
+        </button>
+        {showDebug && debugLogs.length > 0 && (
+          <div style={{ marginTop: '0.5rem', background: '#0a0e1a', border: '1px solid #2a3045', borderRadius: '0.5rem', padding: '0.625rem', maxHeight: '12rem', overflowY: 'auto' }}>
+            {debugLogs.map((l, i) => (
+              <p key={i} style={{ margin: '0 0 0.25rem', fontSize: '0.7rem', color: '#94a3b8', fontFamily: 'monospace' }}>{l}</p>
+            ))}
+          </div>
+        )}
+        {showDebug && debugLogs.length === 0 && (
+          <p style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#475569' }}>Aucun log — le polling n'a pas encore tourné.</p>
         )}
       </div>
 
