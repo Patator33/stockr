@@ -47,6 +47,7 @@ async function notify(title: string, body: string) {
         title,
         body,
         channelId: 'stockr_orders',
+        smallIcon: 'ic_stat_stockr',
         schedule: { at: new Date(Date.now() + 1000) },
       }],
     });

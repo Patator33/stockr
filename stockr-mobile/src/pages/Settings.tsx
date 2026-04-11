@@ -46,6 +46,7 @@ export default function Settings() {
           title: '🧪 Test Stockr',
           body: 'Notifications fonctionnelles !',
           channelId: 'stockr_orders',
+          smallIcon: 'ic_stat_stockr',
           schedule: { at: new Date(Date.now() + 1000) },
         }],
       });
