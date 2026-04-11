@@ -127,6 +127,10 @@ export const api = {
       post('/api/returns', data),
     delete: (id: string) => del(`/api/returns/${id}`),
   },
+  stockReturns: {
+    bulk: (items: { variantId: string; quantity: number }[]) =>
+      post<{ ok: boolean; locationId: string; count: number }>('/api/stock-returns', { items }),
+  },
   orders: {
     list: (status?: string) => get<Order[]>(`/api/orders${status ? `?status=${status}` : ''}`),
     get: (id: string) => get<Order>(`/api/orders/${id}`),
