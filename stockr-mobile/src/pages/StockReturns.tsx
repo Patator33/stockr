@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, type ProductDetail } from '../api';
+import { api, type ProductDetail, type Location } from '../api';
 
 interface ReturnItem {
   variantId: string;
@@ -12,6 +12,8 @@ interface ReturnItem {
 export default function StockReturns() {
   const navigate = useNavigate();
   const [products, setProducts] = useState<ProductDetail[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState('');
   const [items, setItems] = useState<ReturnItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -19,9 +21,12 @@ export default function StockReturns() {
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
-    const prods = await api.products.list();
+    const [prods, locs] = await Promise.all([api.products.list(), api.locations.list()]);
     const details = await Promise.all(prods.map(p => api.products.get(p.id)));
     setProducts(details);
+    setLocations(locs);
+    const def = locs.find(l => l.isDefault);
+    if (def) setSelectedLocationId(def.id);
     setItems(
       details.flatMap(p =>
         p.variants.map(v => ({
@@ -47,11 +52,16 @@ export default function StockReturns() {
   const handleSubmit = async () => {
     const toReturn = items.filter(i => i.quantity > 0);
     if (toReturn.length === 0) return;
+    if (!selectedLocationId) { setError('Choisissez une zone de stockage'); return; }
     setSubmitting(true);
     setError('');
     try {
-      const result = await api.stockReturns.bulk(toReturn.map(i => ({ variantId: i.variantId, quantity: i.quantity })));
-      setSuccess(`✓ ${result.count} variante${result.count > 1 ? 's' : ''} remise${result.count > 1 ? 's' : ''} en stock (zone par défaut)`);
+      const result = await api.stockReturns.bulk(
+        toReturn.map(i => ({ variantId: i.variantId, quantity: i.quantity })),
+        selectedLocationId
+      );
+      const locName = locations.find(l => l.id === selectedLocationId)?.name || '';
+      setSuccess(`✓ ${result.count} variante${result.count > 1 ? 's' : ''} remise${result.count > 1 ? 's' : ''} en stock${locName ? ` → ${locName}` : ''}`);
       setItems(prev => prev.map(i => ({ ...i, quantity: 0 })));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur');
@@ -75,8 +85,24 @@ export default function StockReturns() {
         <h1 style={{ fontSize: '1.125rem', fontWeight: 800, color: '#e2e8f0', margin: 0 }}>↩ Retours de stock</h1>
       </div>
 
+      {locations.length > 0 && (
+        <div style={{ background: '#141824', border: '1px solid #2a3045', borderRadius: '0.75rem', padding: '0.625rem 0.875rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+          <span style={{ fontSize: '0.8125rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>🏭 Zone</span>
+          <select
+            value={selectedLocationId}
+            onChange={e => setSelectedLocationId(e.target.value)}
+            style={{ flex: 1, margin: 0, fontSize: '0.8125rem' }}
+          >
+            <option value="">Choisir…</option>
+            {locations.map(l => (
+              <option key={l.id} value={l.id}>{l.name}{l.isDefault ? ' ★' : ''}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <p style={{ color: '#64748b', fontSize: '0.8125rem', marginBottom: '1rem' }}>
-        Saisissez les quantités à remettre en stock. Elles seront ajoutées à la zone par défaut.
+        Saisissez les quantités à remettre en stock.
       </p>
 
       {success && (
