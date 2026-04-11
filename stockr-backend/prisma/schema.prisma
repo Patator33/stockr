@@ -48,10 +48,12 @@ model StorageLocation {
   id            String          @id @default(uuid())
   name          String
   description   String?
+  isDefault     Boolean         @default(false)
   stocks        Stock[]
   transfersFrom StockTransfer[] @relation("FromLocation")
   transfersTo   StockTransfer[] @relation("ToLocation")
   sales         Sale[]
+  orders        Order[]
   createdAt     DateTime        @default(now())
 }
 
@@ -113,6 +115,8 @@ model Order {
   notes           String?
   status          String      @default("pending")
   shippingDate    DateTime?
+  locationId      String?
+  location        StorageLocation? @relation(fields: [locationId], references: [id])
   items           OrderItem[]
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt

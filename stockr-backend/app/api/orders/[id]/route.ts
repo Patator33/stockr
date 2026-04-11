@@ -23,11 +23,42 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const body = await req.json();
 
+  // Update locationId only
+  if (body.locationId !== undefined && body.status === undefined && body.itemId === undefined) {
+    const order = await prisma.order.update({
+      where: { id },
+      data: { locationId: body.locationId || null },
+      include: { items: { include: { variant: { include: { product: true } } } } },
+    });
+    return NextResponse.json(order);
+  }
+
   // Update order status and/or shippingDate
   if (body.status !== undefined || body.shippingDate !== undefined) {
     const data: Record<string, unknown> = {};
     if (body.status !== undefined) data.status = body.status;
     if (body.shippingDate !== undefined) data.shippingDate = body.shippingDate ? new Date(body.shippingDate) : null;
+
+    // Destock on ship
+    if (body.status === 'shipped') {
+      const order = await prisma.order.findUnique({
+        where: { id },
+        include: { items: true },
+      });
+      if (order?.locationId) {
+        const locationId = order.locationId;
+        for (const item of order.items) {
+          if (item.variantId) {
+            await prisma.stock.upsert({
+              where: { variantId_locationId: { variantId: item.variantId, locationId } },
+              update: { quantity: { decrement: item.quantity } },
+              create: { variantId: item.variantId, locationId, quantity: -item.quantity },
+            });
+          }
+        }
+      }
+    }
+
     const order = await prisma.order.update({
       where: { id },
       data,
