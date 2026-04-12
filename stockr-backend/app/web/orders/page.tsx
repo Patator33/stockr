@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { wGet, wFetch } from '../_api';
 
 interface OrderItem { id: string; variantName: string; quantity: number; scanned: number; barcode?: string | null; variantId?: string | null; }
 interface Order { id: string; status: string; customerName?: string | null; customerEmail?: string | null; notes?: string | null; shippingDate?: string | null; locationId?: string | null; items: OrderItem[]; createdAt: string; }
@@ -9,49 +10,49 @@ const STATUS_LABELS: Record<string, string> = { pending: 'En attente', confirmed
 const STATUS_COLORS: Record<string, string> = { pending: 'badge-pending', confirmed: 'badge-confirmed', prepared: 'badge-prepared', shipped: 'badge-shipped' };
 
 export default function OrdersPage() {
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders,    setOrders]    = useState<Order[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
-  const [filter, setFilter] = useState('active');
-  const [selected, setSelected] = useState<Order | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [barcode, setBarcode] = useState('');
+  const [filter,    setFilter]    = useState('active');
+  const [selected,  setSelected]  = useState<Order | null>(null);
+  const [loading,   setLoading]   = useState(true);
+  const [barcode,   setBarcode]   = useState('');
   const [barcodeMsg, setBarcodeMsg] = useState('');
 
-  useEffect(() => {
+  const loadAll = () =>
     Promise.all([
-      fetch('/api/orders').then(r => r.json()),
-      fetch('/api/locations').then(r => r.json()),
+      wGet<Order[]>('/api/orders'),
+      wGet<Location[]>('/api/locations'),
     ]).then(([o, l]) => {
-      setOrders(Array.isArray(o) ? o : []);
-      setLocations(Array.isArray(l) ? l : []);
-    }).finally(() => setLoading(false));
-  }, []);
+      setOrders(o);
+      setLocations(l);
+    }).catch(() => {}).finally(() => setLoading(false));
 
-  const filtered = orders.filter(o => {
-    if (filter === 'active') return o.status === 'pending' || o.status === 'prepared';
-    if (filter === 'shipped') return o.status === 'shipped';
-    return true;
-  });
+  useEffect(() => { loadAll(); }, []);
 
-  const refresh = () => fetch('/api/orders').then(r => r.json()).then(o => {
-    const arr = Array.isArray(o) ? o : [];
-    setOrders(arr);
-    if (selected) setSelected(arr.find(x => x.id === selected.id) ?? null);
-  });
+  const refresh = () =>
+    wGet<Order[]>('/api/orders').then(arr => {
+      setOrders(arr);
+      if (selected) setSelected(arr.find(x => x.id === selected.id) ?? null);
+    }).catch(() => {});
+
+  const filtered = orders.filter(o =>
+    filter === 'active'  ? (o.status === 'pending' || o.status === 'prepared') :
+    filter === 'shipped' ? o.status === 'shipped' : true
+  );
 
   const updateStatus = async (id: string, status: string) => {
-    await fetch(`/api/orders/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
+    await wFetch(`/api/orders/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) });
     await refresh();
   };
 
   const updateLocation = async (id: string, locationId: string) => {
-    await fetch(`/api/orders/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ locationId }) });
+    await wFetch(`/api/orders/${id}`, { method: 'PATCH', body: JSON.stringify({ locationId }) });
     await refresh();
   };
 
   const deleteOrder = async (id: string) => {
     if (!confirm('Supprimer cette commande ?')) return;
-    await fetch(`/api/orders/${id}`, { method: 'DELETE' });
+    await wFetch(`/api/orders/${id}`, { method: 'DELETE' });
     setSelected(null);
     await refresh();
   };
@@ -60,20 +61,16 @@ export default function OrdersPage() {
     if (!selected || !barcode.trim()) return;
     const bc = barcode.trim();
     setBarcodeMsg('');
-    const item = selected.items.find(i => i.barcode === bc);
+    let item = selected.items.find(i => i.barcode === bc);
     if (!item) {
-      // try API lookup
-      const res = await fetch(`/api/variants?barcode=${encodeURIComponent(bc)}`);
+      const res = await wFetch(`/api/variants?barcode=${encodeURIComponent(bc)}`);
       if (!res.ok) { setBarcodeMsg('Code barre non reconnu'); return; }
       const variant = await res.json();
-      const match = selected.items.find(i => i.variantId === variant.id);
-      if (!match) { setBarcodeMsg('Produit non trouvé dans cette commande'); return; }
-      if (match.scanned >= match.quantity) { setBarcodeMsg('Déjà scanné entièrement'); return; }
-      await fetch(`/api/orders/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId: match.id, scanned: match.scanned + 1 }) });
-    } else {
-      if (item.scanned >= item.quantity) { setBarcodeMsg('Déjà scanné entièrement'); return; }
-      await fetch(`/api/orders/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId: item.id, scanned: item.scanned + 1 }) });
+      item = selected.items.find(i => i.variantId === variant.id);
+      if (!item) { setBarcodeMsg('Produit non trouvé dans cette commande'); return; }
     }
+    if (item.scanned >= item.quantity) { setBarcodeMsg('Déjà scanné entièrement'); return; }
+    await wFetch(`/api/orders/${selected.id}`, { method: 'PATCH', body: JSON.stringify({ itemId: item.id, scanned: item.scanned + 1 }) });
     setBarcode('');
     await refresh();
   };
@@ -93,7 +90,7 @@ export default function OrdersPage() {
         <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           {loading && <p style={{ color: '#475569', fontSize: '0.875rem' }}>Chargement…</p>}
           {filtered.map(o => {
-            const total = o.items.reduce((s, i) => s + i.quantity, 0);
+            const total   = o.items.reduce((s, i) => s + i.quantity, 0);
             const scanned = o.items.reduce((s, i) => s + i.scanned, 0);
             return (
               <div key={o.id} onClick={() => setSelected(o)}
@@ -124,20 +121,14 @@ export default function OrdersPage() {
 
           {selected.notes && <p style={{ margin: 0, fontSize: '0.875rem', color: '#94a3b8', background: '#0f1629', padding: '0.5rem 0.75rem', borderRadius: '0.5rem' }}>{selected.notes}</p>}
 
-          {/* Location picker */}
           <div>
             <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Zone de stockage</label>
-            <select
-              value={selected.locationId || ''}
-              onChange={e => updateLocation(selected.id, e.target.value)}
-              style={{ width: 'auto', minWidth: '12rem' }}
-            >
+            <select value={selected.locationId || ''} onChange={e => updateLocation(selected.id, e.target.value)} style={{ width: 'auto', minWidth: '12rem' }}>
               <option value="">— Aucune —</option>
               {locations.map(l => <option key={l.id} value={l.id}>{l.isDefault ? '★ ' : ''}{l.name}</option>)}
             </select>
           </div>
 
-          {/* Barcode scan */}
           {(selected.status === 'pending' || selected.status === 'confirmed' || selected.status === 'prepared') && (
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
               <div style={{ flex: 1 }}>
@@ -149,31 +140,19 @@ export default function OrdersPage() {
           )}
           {barcodeMsg && <p style={{ margin: 0, fontSize: '0.8125rem', color: '#ef4444' }}>{barcodeMsg}</p>}
 
-          {/* Items */}
           <table>
-            <thead>
-              <tr>
-                <th>Article</th>
-                <th>Qté</th>
-                <th>Scanné</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Article</th><th>Qté</th><th>Scanné</th></tr></thead>
             <tbody>
               {selected.items.map(item => (
                 <tr key={item.id}>
                   <td>{item.variantName}</td>
                   <td>{item.quantity}</td>
-                  <td>
-                    <span style={{ color: item.scanned >= item.quantity ? '#22c55e' : item.scanned > 0 ? '#f59e0b' : '#64748b', fontWeight: 600 }}>
-                      {item.scanned}/{item.quantity}
-                    </span>
-                  </td>
+                  <td><span style={{ color: item.scanned >= item.quantity ? '#22c55e' : item.scanned > 0 ? '#f59e0b' : '#64748b', fontWeight: 600 }}>{item.scanned}/{item.quantity}</span></td>
                 </tr>
               ))}
             </tbody>
           </table>
 
-          {/* Actions */}
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             {selected.status === 'pending' && (
               <button onClick={() => updateStatus(selected.id, 'prepared')} className="btn-primary">Marquer préparée</button>

@@ -1,35 +1,35 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { wGet, wFetch } from '../_api';
 
 interface Sale { id: string; variantId: string; locationId: string; quantity: number; unitSalePrice: number; unitCostPrice: number; unitShippingCost: number; notes?: string | null; createdAt: string; variant?: { name: string; product: { name: string } }; location?: { name: string }; returns?: { id: string; quantity: number; reason?: string | null }[]; }
-interface Variant { id: string; name: string; productId: string; salePrice: number; costPrice: number; shippingCost: number; }
+interface Variant { id: string; name: string; salePrice: number; costPrice: number; shippingCost: number; }
 interface Location { id: string; name: string; isDefault?: boolean; }
 interface SalesPage { sales: Sale[]; total: number; pages: number; }
 
 export default function SalesPage() {
-  const [data, setData] = useState<SalesPage>({ sales: [], total: 0, pages: 1 });
-  const [variants, setVariants] = useState<Variant[]>([]);
+  const [data,      setData]      = useState<SalesPage>({ sales: [], total: 0, pages: 1 });
+  const [variants,  setVariants]  = useState<Variant[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
+  const [page,      setPage]      = useState(1);
+  const [loading,   setLoading]   = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ variantId: '', locationId: '', quantity: 1, unitSalePrice: 0, unitCostPrice: 0, unitShippingCost: 0, notes: '' });
   const [createErr, setCreateErr] = useState('');
 
-  const load = (p = page) => {
+  const load = (p = 1) => {
     setLoading(true);
-    fetch(`/api/sales?page=${p}`).then(r => r.json()).then(d => setData(d)).finally(() => setLoading(false));
+    wGet<SalesPage>(`/api/sales?page=${p}`).then(setData).catch(() => {}).finally(() => setLoading(false));
   };
 
   useEffect(() => {
     load();
-    fetch('/api/variants').then(r => r.json()).then(v => setVariants(Array.isArray(v) ? v : []));
-    fetch('/api/locations').then(r => r.json()).then(l => {
-      const locs = Array.isArray(l) ? l : [];
+    wGet<Variant[]>('/api/variants').then(setVariants).catch(() => {});
+    wGet<Location[]>('/api/locations').then(locs => {
       setLocations(locs);
-      const def = locs.find((x: Location) => x.isDefault);
+      const def = locs.find(l => l.isDefault);
       if (def) setForm(f => ({ ...f, locationId: def.id }));
-    });
+    }).catch(() => {});
   }, []);
 
   const handleVariantChange = (variantId: string) => {
@@ -40,34 +40,38 @@ export default function SalesPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreateErr('');
-    const res = await fetch('/api/sales', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, quantity: Number(form.quantity) }) });
-    const d = await res.json();
-    if (!res.ok) { setCreateErr(d.error || 'Erreur'); return; }
-    setShowCreate(false);
-    load(1);
+    try {
+      const res = await wFetch('/api/sales', { method: 'POST', body: JSON.stringify({ ...form, quantity: Number(form.quantity) }) });
+      const d = await res.json();
+      if (!res.ok) { setCreateErr(d.error || 'Erreur'); return; }
+      setShowCreate(false);
+      load(1);
+    } catch (err) { setCreateErr(err instanceof Error ? err.message : 'Erreur'); }
   };
 
   const deleteSale = async (id: string) => {
     if (!confirm('Supprimer cette vente ?')) return;
-    await fetch(`/api/sales/${id}`, { method: 'DELETE' });
-    load();
+    await wFetch(`/api/sales/${id}`, { method: 'DELETE' });
+    load(page);
   };
 
-  const deleteReturn = async (saleId: string, returnId: string) => {
+  const deleteReturn = async (returnId: string) => {
     if (!confirm('Supprimer ce retour ?')) return;
-    await fetch(`/api/returns/${returnId}`, { method: 'DELETE' });
-    load();
+    await wFetch(`/api/returns/${returnId}`, { method: 'DELETE' });
+    load(page);
   };
 
-  const addReturn = async (saleId: string, qty: number) => {
-    const qStr = prompt(`Quantité à retourner (max ${qty}):`);
+  const addReturn = async (saleId: string, max: number) => {
+    const qStr = prompt(`Quantité à retourner (max ${max}):`);
     if (!qStr) return;
     const q = parseInt(qStr);
-    if (!q || q <= 0 || q > qty) return;
+    if (!q || q <= 0 || q > max) return;
     const reason = prompt('Raison (optionnel):') || 'Retour';
-    await fetch('/api/returns', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ saleId, quantity: q, reason }) });
-    load();
+    await wFetch('/api/returns', { method: 'POST', body: JSON.stringify({ saleId, quantity: q, reason }) });
+    load(page);
   };
+
+  const goPage = (p: number) => { setPage(p); load(p); };
 
   return (
     <div>
@@ -100,15 +104,15 @@ export default function SalesPage() {
             </div>
             <div>
               <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Prix vente (€)</label>
-              <input type="number" step="0.01" value={form.unitSalePrice} onChange={e => setForm(f => ({ ...f, unitSalePrice: Number(e.target.value) }))} required />
+              <input type="number" step="0.01" value={form.unitSalePrice} onChange={e => setForm(f => ({ ...f, unitSalePrice: Number(e.target.value) }))} />
             </div>
             <div>
               <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Prix achat (€)</label>
-              <input type="number" step="0.01" value={form.unitCostPrice} onChange={e => setForm(f => ({ ...f, unitCostPrice: Number(e.target.value) }))} required />
+              <input type="number" step="0.01" value={form.unitCostPrice} onChange={e => setForm(f => ({ ...f, unitCostPrice: Number(e.target.value) }))} />
             </div>
             <div>
               <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Frais port (€)</label>
-              <input type="number" step="0.01" value={form.unitShippingCost} onChange={e => setForm(f => ({ ...f, unitShippingCost: Number(e.target.value) }))} required />
+              <input type="number" step="0.01" value={form.unitShippingCost} onChange={e => setForm(f => ({ ...f, unitShippingCost: Number(e.target.value) }))} />
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Notes</label>
@@ -128,25 +132,14 @@ export default function SalesPage() {
           <>
             <p style={{ margin: '0 0 0.75rem', fontSize: '0.875rem', color: '#64748b' }}>{data.total} vente{data.total !== 1 ? 's' : ''}</p>
             <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Produit</th>
-                  <th>Zone</th>
-                  <th>Qté</th>
-                  <th>CA</th>
-                  <th>Marge</th>
-                  <th>Notes</th>
-                  <th></th>
-                </tr>
-              </thead>
+              <thead><tr><th>Date</th><th>Produit</th><th>Zone</th><th>Qté</th><th>CA</th><th>Marge</th><th>Notes</th><th></th></tr></thead>
               <tbody>
                 {data.sales.flatMap(s => {
                   const ret = s.returns?.reduce((sum, r) => sum + r.quantity, 0) || 0;
                   const net = s.quantity - ret;
                   const revenue = net * s.unitSalePrice;
-                  const margin = revenue - net * s.unitCostPrice - net * s.unitShippingCost;
-                  const rows = [
+                  const margin  = revenue - net * s.unitCostPrice - net * s.unitShippingCost;
+                  return [
                     <tr key={s.id}>
                       <td style={{ fontSize: '0.75rem', color: '#64748b' }}>{new Date(s.createdAt).toLocaleDateString('fr-FR')}</td>
                       <td>{s.variant ? `${s.variant.product.name} · ${s.variant.name}` : s.variantId.slice(0, 8)}</td>
@@ -157,7 +150,7 @@ export default function SalesPage() {
                       <td style={{ fontSize: '0.75rem', color: '#64748b' }}>{s.notes || '—'}</td>
                       <td>
                         <div style={{ display: 'flex', gap: '0.25rem' }}>
-                          <button onClick={() => addReturn(s.id, s.quantity - ret)} style={{ background: 'none', border: '1px solid #2a3045', borderRadius: '0.375rem', color: '#94a3b8', fontSize: '0.7rem', padding: '0.2rem 0.4rem' }}>↩ Retour</button>
+                          <button onClick={() => addReturn(s.id, s.quantity - ret)} style={{ background: 'none', border: '1px solid #2a3045', borderRadius: '0.375rem', color: '#94a3b8', fontSize: '0.7rem', padding: '0.2rem 0.4rem' }}>↩</button>
                           <button onClick={() => deleteSale(s.id)} style={{ background: 'none', border: '1px solid #7f1d1d', borderRadius: '0.375rem', color: '#ef4444', fontSize: '0.7rem', padding: '0.2rem 0.4rem' }}>✕</button>
                         </div>
                       </td>
@@ -167,19 +160,18 @@ export default function SalesPage() {
                         <td></td>
                         <td colSpan={5} style={{ fontSize: '0.75rem', color: '#64748b', paddingLeft: '2rem' }}>↩ Retour: {r.quantity} · {r.reason || '—'}</td>
                         <td></td>
-                        <td><button onClick={() => deleteReturn(s.id, r.id)} style={{ background: 'none', border: '1px solid #7f1d1d', borderRadius: '0.375rem', color: '#ef4444', fontSize: '0.7rem', padding: '0.2rem 0.4rem' }}>✕</button></td>
+                        <td><button onClick={() => deleteReturn(r.id)} style={{ background: 'none', border: '1px solid #7f1d1d', borderRadius: '0.375rem', color: '#ef4444', fontSize: '0.7rem', padding: '0.2rem 0.4rem' }}>✕</button></td>
                       </tr>
                     )),
                   ];
-                  return rows;
                 })}
               </tbody>
             </table>
             {data.pages > 1 && (
               <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', justifyContent: 'center' }}>
-                <button onClick={() => { setPage(p => Math.max(1, p - 1)); load(page - 1); }} disabled={page === 1} className="btn-ghost" style={{ fontSize: '0.75rem' }}>← Préc</button>
+                <button onClick={() => goPage(page - 1)} disabled={page === 1} className="btn-ghost" style={{ fontSize: '0.75rem' }}>← Préc</button>
                 <span style={{ color: '#64748b', fontSize: '0.875rem', alignSelf: 'center' }}>Page {page}/{data.pages}</span>
-                <button onClick={() => { setPage(p => Math.min(data.pages, p + 1)); load(page + 1); }} disabled={page === data.pages} className="btn-ghost" style={{ fontSize: '0.75rem' }}>Suiv →</button>
+                <button onClick={() => goPage(page + 1)} disabled={page === data.pages} className="btn-ghost" style={{ fontSize: '0.75rem' }}>Suiv →</button>
               </div>
             )}
           </>

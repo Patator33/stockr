@@ -3,6 +3,7 @@ import './web.css';
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { AuthContext, type AuthCtx } from './_auth';
+import { wFetch } from './_api';
 
 const NAV = [
   { href: '/web/dashboard', label: 'Dashboard', icon: '🏠' },
@@ -23,7 +24,7 @@ export default function WebLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (isLogin) { setLoading(false); return; }
-    fetch('/api/auth/me')
+    wFetch('/api/auth/me')
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (!data) { router.replace('/web/login'); return; }
@@ -52,7 +53,6 @@ export default function WebLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={auth}>
       <div style={{ display: 'flex', minHeight: '100vh' }}>
-        {/* Sidebar */}
         <aside style={{
           width: '13rem', background: '#0d1117', borderRight: '1px solid #2a3045',
           position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 10,
@@ -83,8 +83,6 @@ export default function WebLayout({ children }: { children: React.ReactNode }) {
             })}
           </nav>
         </aside>
-
-        {/* Main content */}
         <main style={{ flex: 1, marginLeft: '13rem', padding: '1.5rem', minHeight: '100vh', maxWidth: 'calc(100vw - 13rem)', overflowX: 'hidden' }}>
           {children}
         </main>

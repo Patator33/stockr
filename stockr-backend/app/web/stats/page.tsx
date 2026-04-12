@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { wGet } from '../_api';
 
 interface Stats { period: number; totalRevenue: number; totalCost: number; totalShipping: number; grossMargin: number; netMargin: number; totalSoldQty: number; totalReturnedQty: number; totalStock: number; topVariants: { name: string; productName: string; sold: number; returned: number; revenue: number; margin: number }[]; }
 interface Product { id: string; name: string; }
@@ -15,24 +16,22 @@ function Card({ label, value, sub, color }: { label: string; value: string; sub?
 }
 
 export default function StatsPage() {
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [period, setPeriod] = useState('30');
+  const [stats,     setStats]     = useState<Stats | null>(null);
+  const [products,  setProducts]  = useState<Product[]>([]);
+  const [period,    setPeriod]    = useState('30');
   const [productId, setProductId] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading,   setLoading]   = useState(true);
 
-  const load = () => {
+  useEffect(() => {
+    wGet<Product[]>('/api/products').then(setProducts).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     setLoading(true);
     const q = new URLSearchParams({ period });
     if (productId) q.set('productId', productId);
-    fetch(`/api/stats?${q}`).then(r => r.json()).then(setStats).finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    fetch('/api/products').then(r => r.json()).then(p => setProducts(Array.isArray(p) ? p : []));
-  }, []);
-
-  useEffect(() => { load(); }, [period, productId]);
+    wGet<Stats>(`/api/stats?${q}`).then(setStats).catch(() => {}).finally(() => setLoading(false));
+  }, [period, productId]);
 
   return (
     <div>
@@ -57,45 +56,38 @@ export default function StatsPage() {
       {stats && (
         <>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
-            <Card label="Chiffre d'affaires" value={`${stats.totalRevenue.toFixed(2)} €`} color="#3b82f6" />
-            <Card label="Coût total" value={`${stats.totalCost.toFixed(2)} €`} color="#f59e0b" />
-            <Card label="Marge brute" value={`${stats.grossMargin.toFixed(2)} €`} color={stats.grossMargin >= 0 ? '#22c55e' : '#ef4444'} sub={stats.totalRevenue > 0 ? `${((stats.grossMargin / stats.totalRevenue) * 100).toFixed(1)}%` : undefined} />
-            <Card label="Marge nette" value={`${stats.netMargin.toFixed(2)} €`} color={stats.netMargin >= 0 ? '#22c55e' : '#ef4444'} sub={`Dont port: ${stats.totalShipping.toFixed(2)} €`} />
-            <Card label="Unités vendues" value={String(stats.totalSoldQty)} sub={`${stats.totalReturnedQty} retours`} />
-            <Card label="Stock total" value={String(stats.totalStock)} />
+            <Card label="CA"          value={`${stats.totalRevenue.toFixed(2)} €`} color="#3b82f6" />
+            <Card label="Coût"        value={`${stats.totalCost.toFixed(2)} €`}    color="#f59e0b" />
+            <Card label="Marge brute" value={`${stats.grossMargin.toFixed(2)} €`}  color={stats.grossMargin >= 0 ? '#22c55e' : '#ef4444'}
+              sub={stats.totalRevenue > 0 ? `${((stats.grossMargin / stats.totalRevenue) * 100).toFixed(1)}%` : undefined} />
+            <Card label="Marge nette" value={`${stats.netMargin.toFixed(2)} €`}    color={stats.netMargin >= 0 ? '#22c55e' : '#ef4444'}
+              sub={`Port: ${stats.totalShipping.toFixed(2)} €`} />
+            <Card label="Vendus"      value={String(stats.totalSoldQty)}            sub={`${stats.totalReturnedQty} retours`} />
+            <Card label="Stock"       value={String(stats.totalStock)} />
           </div>
 
           <div className="card">
             <h2 style={{ margin: '0 0 1rem', fontSize: '1rem', fontWeight: 700 }}>Top variantes ({period}j)</h2>
-            {stats.topVariants.length === 0 && <p style={{ color: '#475569', fontSize: '0.875rem' }}>Aucune vente sur cette période.</p>}
-            {stats.topVariants.length > 0 && (
-              <table>
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Produit</th>
-                    <th>Variante</th>
-                    <th>Vendus</th>
-                    <th>Retours</th>
-                    <th>CA</th>
-                    <th>Marge</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stats.topVariants.map((v, i) => (
-                    <tr key={i}>
-                      <td style={{ color: '#475569', fontSize: '0.75rem' }}>{i + 1}</td>
-                      <td style={{ color: '#94a3b8', fontSize: '0.8125rem' }}>{v.productName}</td>
-                      <td style={{ fontWeight: 600 }}>{v.name}</td>
-                      <td>{v.sold}</td>
-                      <td style={{ color: v.returned > 0 ? '#ef4444' : '#64748b' }}>{v.returned}</td>
-                      <td style={{ color: '#3b82f6' }}>{v.revenue.toFixed(2)} €</td>
-                      <td style={{ color: v.margin >= 0 ? '#22c55e' : '#ef4444' }}>{v.margin.toFixed(2)} €</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+            {stats.topVariants.length === 0
+              ? <p style={{ color: '#475569', fontSize: '0.875rem' }}>Aucune vente sur cette période.</p>
+              : (
+                <table>
+                  <thead><tr><th>#</th><th>Produit</th><th>Variante</th><th>Vendus</th><th>Retours</th><th>CA</th><th>Marge</th></tr></thead>
+                  <tbody>
+                    {stats.topVariants.map((v, i) => (
+                      <tr key={i}>
+                        <td style={{ color: '#475569', fontSize: '0.75rem' }}>{i + 1}</td>
+                        <td style={{ color: '#94a3b8', fontSize: '0.8125rem' }}>{v.productName}</td>
+                        <td style={{ fontWeight: 600 }}>{v.name}</td>
+                        <td>{v.sold}</td>
+                        <td style={{ color: v.returned > 0 ? '#ef4444' : '#64748b' }}>{v.returned}</td>
+                        <td style={{ color: '#3b82f6' }}>{v.revenue.toFixed(2)} €</td>
+                        <td style={{ color: v.margin >= 0 ? '#22c55e' : '#ef4444' }}>{v.margin.toFixed(2)} €</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
           </div>
         </>
       )}
