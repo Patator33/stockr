@@ -79,9 +79,23 @@ export const api = {
     create: (email: string, password: string) => post<{ token: string }>('/api/setup', { email, password }),
   },
   auth: {
-    login: (email: string, password: string) => post<{ token: string; email: string }>('/api/auth/login', { email, password }),
+    login: (email: string, password: string) => post<{ token: string; email: string; role: string }>('/api/auth/login', { email, password }),
     logout: () => post('/api/auth/logout', {}),
-    me: () => get<{ id: string; email: string }>('/api/auth/me'),
+    me: () => get<{ id: string; email: string; role: string }>('/api/auth/me'),
+  },
+  users: {
+    list: () => get<UserProfile[]>('/api/users'),
+    create: (email: string, password: string, role?: string) => post<UserProfile>('/api/users', { email, password, role }),
+    setRole: (id: string, role: string) => patch<UserProfile>(`/api/users/${id}`, { role }),
+    delete: (id: string) => del(`/api/users/${id}`),
+  },
+  logs: {
+    list: (limit?: number, offset?: number) => {
+      const q = new URLSearchParams();
+      if (limit) q.set('limit', String(limit));
+      if (offset) q.set('offset', String(offset));
+      return get<{ logs: AuditLog[]; total: number }>(`/api/logs?${q}`);
+    },
   },
   products: {
     list: () => get<Product[]>('/api/products'),
@@ -323,4 +337,20 @@ export interface Order {
   items: OrderItem[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  role: string;
+  createdAt: string;
+}
+
+export interface AuditLog {
+  id: string;
+  userId?: string | null;
+  userEmail?: string | null;
+  action: string;
+  details?: string | null;
+  createdAt: string;
 }

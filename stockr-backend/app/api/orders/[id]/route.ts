@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { logAction } from '@/lib/audit';
 
-async function auth(req: NextRequest) {
-  try { await requireAuth(req); } catch { return false; }
-  return true;
+async function auth(req: NextRequest): Promise<{ ok: false } | { ok: true; userId: string; userEmail: string }> {
+  try {
+    const userId = await requireAuth(req);
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+    return { ok: true, userId, userEmail: user?.email ?? '' };
+  } catch { return { ok: false }; }
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!await auth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const session = await auth(req);
+  if (!session.ok) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const { id } = await params;
   const order = await prisma.order.findUnique({
     where: { id },
@@ -19,7 +24,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!await auth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const session = await auth(req);
+  if (!session.ok) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const { id } = await params;
   const body = await req.json();
 
@@ -75,6 +81,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       data,
       include: { items: { include: { variant: { include: { product: true } } } } },
     });
+    if (body.status) {
+      await logAction(session.userId, session.userEmail, `order.${body.status}`, `Commande ${id.slice(0, 8)}`);
+    }
     return NextResponse.json(order);
   }
 
@@ -91,8 +100,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!await auth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const session = await auth(req);
+  if (!session.ok) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const { id } = await params;
   await prisma.order.delete({ where: { id } });
+  await logAction(session.userId, session.userEmail, 'order.delete', `Commande ${id.slice(0, 8)}`);
   return NextResponse.json({ ok: true });
 }

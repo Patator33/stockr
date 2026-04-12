@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Email et mot de passe requis (6 caractères min)' }, { status: 400 });
   }
   const passwordHash = await bcrypt.hash(password, 12);
-  const user = await prisma.user.create({ data: { email, passwordHash } });
+  const user = await prisma.user.create({ data: { email, passwordHash, role: 'admin' } });
   const token = await createSession(user.id);
   return NextResponse.json({ token, userId: user.id });
 }

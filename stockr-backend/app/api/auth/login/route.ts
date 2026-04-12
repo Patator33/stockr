@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { createSession } from '@/lib/auth';
+import { logAction } from '@/lib/audit';
 
 export async function POST(req: NextRequest) {
   const { email, password } = await req.json();
@@ -17,5 +18,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Identifiants invalides' }, { status: 401 });
   }
   const token = await createSession(user.id);
-  return NextResponse.json({ token, userId: user.id, email: user.email });
+  await logAction(user.id, user.email, 'auth.login');
+  return NextResponse.json({ token, userId: user.id, email: user.email, role: user.role });
 }
