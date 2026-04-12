@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '../layout';
+import { useAuth } from '../_auth';
 
 interface UserProfile { id: string; email: string; role: string; createdAt: string; }
 interface AuditLog { id: string; userId?: string | null; userEmail?: string | null; action: string; details?: string | null; createdAt: string; }
