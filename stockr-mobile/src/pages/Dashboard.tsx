@@ -53,6 +53,7 @@ export default function Dashboard() {
   const [addVariantId, setAddVariantId] = useState('');
   const [addLocationId, setAddLocationId] = useState('');
   const [addQty, setAddQty] = useState('');
+  const [addMode, setAddMode] = useState<'add' | 'remove' | 'set'>('add');
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState('');
   const [addVariants, setAddVariants] = useState<Variant[]>([]);
@@ -161,6 +162,7 @@ export default function Dashboard() {
     setAddVariantId('');
     setAddLocationId('');
     setAddQty('');
+    setAddMode('add');
     setAddError('');
     const variants = await api.variants.list(selectedProductId);
     setAddVariants(variants);
@@ -172,7 +174,13 @@ export default function Dashboard() {
     setAddError('');
     setAddLoading(true);
     try {
-      await api.stocks.adjust({ variantId: addVariantId, locationId: addLocationId, quantity: Number(addQty) });
+      const qty = Number(addQty);
+      if (addMode === 'set') {
+        await api.stocks.adjust({ variantId: addVariantId, locationId: addLocationId, quantity: qty, mode: 'set' });
+      } else {
+        // 'add' = positive increment, 'remove' = negative increment
+        await api.stocks.adjust({ variantId: addVariantId, locationId: addLocationId, quantity: addMode === 'remove' ? -qty : qty, mode: 'add' });
+      }
       setAddStockModal(null);
       await load();
     } catch (err: unknown) {
@@ -410,8 +418,21 @@ export default function Dashboard() {
             onClick={e => e.stopPropagation()}
           >
             <div style={{ width: '2rem', height: '4px', background: '#2a3045', borderRadius: '2px', margin: '0 auto 1.25rem' }} />
-            <h2 style={{ color: '#e2e8f0', fontSize: '1.125rem', fontWeight: 700, margin: '0 0 1rem' }}>+ Ajouter du stock</h2>
+            <h2 style={{ color: '#e2e8f0', fontSize: '1.125rem', fontWeight: 700, margin: '0 0 1rem' }}>Stock</h2>
             <form onSubmit={handleAddStock} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {/* Mode selector */}
+              <div style={{ display: 'flex', gap: '0.375rem' }}>
+                {(['add', 'remove', 'set'] as const).map(m => {
+                  const labels = { add: '+ Ajouter', remove: '− Retirer', set: '= Définir' };
+                  const colors = {
+                    add:    { active: { background: 'rgba(34,197,94,0.15)',  color: '#22c55e', border: '1px solid rgba(34,197,94,0.4)'  }, idle: { background: 'none', color: '#64748b', border: '1px solid #2a3045' } },
+                    remove: { active: { background: 'rgba(239,68,68,0.15)',  color: '#ef4444', border: '1px solid rgba(239,68,68,0.4)'  }, idle: { background: 'none', color: '#64748b', border: '1px solid #2a3045' } },
+                    set:    { active: { background: 'rgba(43,140,238,0.15)', color: '#2b8cee', border: '1px solid rgba(43,140,238,0.4)' }, idle: { background: 'none', color: '#64748b', border: '1px solid #2a3045' } },
+                  };
+                  const style = { ...(addMode === m ? colors[m].active : colors[m].idle), flex: 1, borderRadius: '0.5rem', padding: '0.5rem 0', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer' };
+                  return <button key={m} type="button" style={style} onClick={() => setAddMode(m)}>{labels[m]}</button>;
+                })}
+              </div>
               <div>
                 <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">Variante</label>
                 <select value={addVariantId} onChange={e => setAddVariantId(e.target.value)} required>
@@ -431,14 +452,16 @@ export default function Dashboard() {
                 </select>
               </div>
               <div>
-                <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">Quantité à ajouter</label>
-                <input type="number" min="1" value={addQty} onChange={e => setAddQty(e.target.value)} required />
+                <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">
+                  {addMode === 'add' ? 'Quantité à ajouter' : addMode === 'remove' ? 'Quantité à retirer' : 'Nouvelle quantité'}
+                </label>
+                <input type="number" min={addMode === 'set' ? '0' : '1'} value={addQty} onChange={e => setAddQty(e.target.value)} required />
               </div>
               {addError && <p style={{ color: '#ef4444', fontSize: '0.875rem', margin: 0 }}>{addError}</p>}
               <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem' }}>
                 <button type="button" className="btn-ghost" style={{ flex: 1 }} onClick={() => setAddStockModal(null)}>Annuler</button>
                 <button type="submit" className="btn-primary" style={{ flex: 2 }} disabled={addLoading}>
-                  {addLoading ? 'Ajout…' : 'Ajouter'}
+                  {addLoading ? '…' : addMode === 'add' ? 'Ajouter' : addMode === 'remove' ? 'Retirer' : 'Définir'}
                 </button>
               </div>
             </form>

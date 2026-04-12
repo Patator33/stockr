@@ -120,7 +120,7 @@ export const api = {
   },
   stocks: {
     byProduct: (productId?: string) => get<StockByLocation[]>(`/api/stocks${productId ? `?productId=${productId}` : ''}`),
-    adjust: (data: { variantId: string; locationId: string; quantity: number }) =>
+    adjust: (data: { variantId: string; locationId: string; quantity: number; mode?: 'add' | 'set' }) =>
       post('/api/stocks/adjust', data),
     transfer: (data: TransferInput) => post('/api/stocks/transfer', data),
   },
