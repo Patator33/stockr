@@ -22,6 +22,7 @@ export default function ProductDetailPage() {
   const [defaultLocationId, setDefaultLocationId] = useState<string>('');
   const [savingDefault, setSavingDefault] = useState(false);
   const [scanningVariantId, setScanningVariantId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState('');
 
   // New variant modal
   const [showNewVariant, setShowNewVariant] = useState(false);
@@ -32,6 +33,16 @@ export default function ProductDetailPage() {
   const [vShipping, setVShipping] = useState('');
   const [vLoading, setVLoading] = useState(false);
   const [vError, setVError] = useState('');
+
+  // Edit variant modal
+  const [editVariantId, setEditVariantId] = useState<string | null>(null);
+  const [evName, setEvName] = useState('');
+  const [evAttrs, setEvAttrs] = useState<Attribute[]>([{ key: '', value: '' }]);
+  const [evCost, setEvCost] = useState('');
+  const [evSale, setEvSale] = useState('');
+  const [evShipping, setEvShipping] = useState('');
+  const [evLoading, setEvLoading] = useState(false);
+  const [evError, setEvError] = useState('');
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -108,13 +119,65 @@ export default function ProductDetailPage() {
 
   const handleDeleteVariant = async () => {
     if (!deleteVariant) return;
-    try { await api.variants.delete(deleteVariant); setDeleteVariant(null); await load(); } catch { /* ignore */ }
+    const id = deleteVariant;
+    setDeleteVariant(null);
+    setDeleteError('');
+    try {
+      await api.variants.delete(id);
+      await load();
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : 'Erreur lors de la suppression');
+    }
   };
 
   const addAttr = () => setVAttrs(a => [...a, { key: '', value: '' }]);
   const removeAttr = (i: number) => setVAttrs(a => a.filter((_, idx) => idx !== i));
   const setAttr = (i: number, field: 'key' | 'value', val: string) =>
     setVAttrs(a => a.map((attr, idx) => idx === i ? { ...attr, [field]: val } : attr));
+
+  // Collect distinct attribute keys from all existing variants for suggestions
+  const attrKeySuggestions = product
+    ? [...new Set(product.variants.flatMap(v => parseAttrs(v.attributes).map(a => a.key)).filter(Boolean))]
+    : [];
+
+  const openEditVariant = (v: import('../api').VariantWithStocks) => {
+    const attrs = parseAttrs(v.attributes);
+    setEditVariantId(v.id);
+    setEvName(v.name);
+    setEvAttrs(attrs.length > 0 ? attrs : [{ key: '', value: '' }]);
+    setEvCost(String(v.costPrice));
+    setEvSale(String(v.salePrice));
+    setEvShipping(String(v.shippingCost));
+    setEvError('');
+  };
+
+  const handleEditVariant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editVariantId) return;
+    setEvError('');
+    setEvLoading(true);
+    const variant = product!.variants.find(v => v.id === editVariantId)!;
+    try {
+      await api.variants.update(editVariantId, {
+        name: evName,
+        attributes: evAttrs.filter(a => a.key && a.value),
+        costPrice: Number(evCost) || 0,
+        salePrice: Number(evSale) || 0,
+        shippingCost: Number(evShipping) || 0,
+        barcode: variant.barcode,
+        supplierRef: variant.supplierRef,
+      });
+      setEditVariantId(null);
+      await load();
+    } catch (err: unknown) {
+      setEvError(err instanceof Error ? err.message : 'Erreur');
+    } finally { setEvLoading(false); }
+  };
+
+  const addEvAttr = () => setEvAttrs(a => [...a, { key: '', value: '' }]);
+  const removeEvAttr = (i: number) => setEvAttrs(a => a.filter((_, idx) => idx !== i));
+  const setEvAttr = (i: number, field: 'key' | 'value', val: string) =>
+    setEvAttrs(a => a.map((attr, idx) => idx === i ? { ...attr, [field]: val } : attr));
 
   if (!product) return <div className="flex items-center justify-center h-full text-text-muted text-sm">Chargement…</div>;
 
@@ -159,6 +222,15 @@ export default function ProductDetailPage() {
                 <option value="">Aucun</option>
                 {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
               </select>
+            </div>
+          )}
+
+          {deleteError && (
+            <div
+              onClick={() => setDeleteError('')}
+              style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.75rem', padding: '0.75rem 1rem', marginBottom: '0.75rem', color: '#ef4444', fontSize: '0.875rem', cursor: 'pointer' }}
+            >
+              ✕ {deleteError}
             </div>
           )}
 
@@ -226,6 +298,7 @@ export default function ProductDetailPage() {
                   </button>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                  <button className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }} onClick={() => openEditVariant(v)}>✏️ Modifier</button>
                   <button className="btn-danger" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }} onClick={() => setDeleteVariant(v.id)}>Supprimer</button>
                 </div>
               </div>
@@ -255,9 +328,12 @@ export default function ProductDetailPage() {
                   <label className="text-text-muted text-xs uppercase tracking-wide">Attributs</label>
                   <button type="button" onClick={addAttr} style={{ color: '#2b8cee', background: 'none', border: 'none', fontSize: '0.8125rem', cursor: 'pointer' }}>+ Ajouter</button>
                 </div>
+                <datalist id="attr-key-suggestions">
+                  {attrKeySuggestions.map(k => <option key={k} value={k} />)}
+                </datalist>
                 {vAttrs.map((a, i) => (
                   <div key={i} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.375rem', alignItems: 'center' }}>
-                    <input type="text" value={a.key} onChange={e => setAttr(i, 'key', e.target.value)} placeholder="Clé (ex: Couleur)" style={{ flex: 1 }} />
+                    <input type="text" list="attr-key-suggestions" value={a.key} onChange={e => setAttr(i, 'key', e.target.value)} placeholder="Clé (ex: Couleur)" style={{ flex: 1 }} />
                     <input type="text" value={a.value} onChange={e => setAttr(i, 'value', e.target.value)} placeholder="Valeur (ex: Bleu)" style={{ flex: 1 }} />
                     {vAttrs.length > 1 && (
                       <button type="button" onClick={() => removeAttr(i)} style={{ color: '#ef4444', background: 'none', border: 'none', fontSize: '1rem', cursor: 'pointer', padding: '0 0.25rem' }}>✕</button>
@@ -285,6 +361,62 @@ export default function ProductDetailPage() {
               <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem' }}>
                 <button type="button" className="btn-ghost" style={{ flex: 1 }} onClick={() => setShowNewVariant(false)}>Annuler</button>
                 <button type="submit" className="btn-primary" style={{ flex: 2 }} disabled={vLoading}>{vLoading ? 'Création…' : 'Créer'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Variant bottom sheet */}
+      {editVariantId && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end', zIndex: 100 }} onClick={() => setEditVariantId(null)}>
+          <div style={{ background: '#1e2535', borderRadius: '20px 20px 0 0', padding: '1.5rem', paddingBottom: 'calc(1.5rem + 72px)', width: '100%', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            <div style={{ width: '2rem', height: '4px', background: '#2a3045', borderRadius: '2px', margin: '0 auto 1.25rem' }} />
+            <h2 style={{ color: '#e2e8f0', fontSize: '1.125rem', fontWeight: 700, margin: '0 0 1rem' }}>Modifier la variante</h2>
+            <form onSubmit={handleEditVariant} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div>
+                <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">Nom de la variante *</label>
+                <input type="text" value={evName} onChange={e => setEvName(e.target.value)} placeholder="Ex: Bleu XL" required />
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.375rem' }}>
+                  <label className="text-text-muted text-xs uppercase tracking-wide">Attributs</label>
+                  <button type="button" onClick={addEvAttr} style={{ color: '#2b8cee', background: 'none', border: 'none', fontSize: '0.8125rem', cursor: 'pointer' }}>+ Ajouter</button>
+                </div>
+                <datalist id="attr-key-suggestions-edit">
+                  {attrKeySuggestions.map(k => <option key={k} value={k} />)}
+                </datalist>
+                {evAttrs.map((a, i) => (
+                  <div key={i} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.375rem', alignItems: 'center' }}>
+                    <input type="text" list="attr-key-suggestions-edit" value={a.key} onChange={e => setEvAttr(i, 'key', e.target.value)} placeholder="Clé (ex: Couleur)" style={{ flex: 1 }} />
+                    <input type="text" value={a.value} onChange={e => setEvAttr(i, 'value', e.target.value)} placeholder="Valeur (ex: Bleu)" style={{ flex: 1 }} />
+                    {evAttrs.length > 1 && (
+                      <button type="button" onClick={() => removeEvAttr(i)} style={{ color: '#ef4444', background: 'none', border: 'none', fontSize: '1rem', cursor: 'pointer', padding: '0 0.25rem' }}>✕</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+                <div>
+                  <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">Coût prod. €</label>
+                  <input type="number" step="0.01" min="0" value={evCost} onChange={e => setEvCost(e.target.value)} placeholder="0.00" />
+                </div>
+                <div>
+                  <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">Prix vente €</label>
+                  <input type="number" step="0.01" min="0" value={evSale} onChange={e => setEvSale(e.target.value)} placeholder="0.00" />
+                </div>
+                <div>
+                  <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">Expédition €</label>
+                  <input type="number" step="0.01" min="0" value={evShipping} onChange={e => setEvShipping(e.target.value)} placeholder="0.00" />
+                </div>
+              </div>
+
+              {evError && <p style={{ color: '#ef4444', fontSize: '0.875rem', margin: 0 }}>{evError}</p>}
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem' }}>
+                <button type="button" className="btn-ghost" style={{ flex: 1 }} onClick={() => setEditVariantId(null)}>Annuler</button>
+                <button type="submit" className="btn-primary" style={{ flex: 2 }} disabled={evLoading}>{evLoading ? 'Sauvegarde…' : 'Sauvegarder'}</button>
               </div>
             </form>
           </div>
