@@ -39,22 +39,33 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (body.status !== undefined) data.status = body.status;
     if (body.shippingDate !== undefined) data.shippingDate = body.shippingDate ? new Date(body.shippingDate) : null;
 
-    // Destock on ship
+    // Destock + create Sales on ship
     if (body.status === 'shipped') {
       const order = await prisma.order.findUnique({
         where: { id },
-        include: { items: true },
+        include: { items: { include: { variant: true } } },
       });
       if (order?.locationId) {
         const locationId = order.locationId;
         for (const item of order.items) {
-          if (item.variantId) {
-            await prisma.stock.upsert({
-              where: { variantId_locationId: { variantId: item.variantId, locationId } },
-              update: { quantity: { decrement: item.quantity } },
-              create: { variantId: item.variantId, locationId, quantity: -item.quantity },
-            });
-          }
+          if (!item.variantId || !item.variant) continue;
+          const variant = item.variant;
+          await prisma.stock.upsert({
+            where: { variantId_locationId: { variantId: item.variantId, locationId } },
+            update: { quantity: { decrement: item.quantity } },
+            create: { variantId: item.variantId, locationId, quantity: -item.quantity },
+          });
+          await prisma.sale.create({
+            data: {
+              variantId: item.variantId,
+              locationId,
+              quantity: item.quantity,
+              unitSalePrice: variant.salePrice,
+              unitCostPrice: variant.costPrice,
+              unitShippingCost: variant.shippingCost,
+              notes: `Commande ${order.customerName || order.customerEmail || order.id.slice(0, 8)}`,
+            },
+          });
         }
       }
     }

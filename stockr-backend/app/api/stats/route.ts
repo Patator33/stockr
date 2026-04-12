@@ -73,6 +73,8 @@ export async function GET(req: NextRequest) {
   const stockAgg = await prisma.stock.aggregate({ where: stockWhere, _sum: { quantity: true } });
   const totalStock = stockAgg._sum.quantity || 0;
 
+  console.log(`[stats] productId=${productId} period=${days}d from=${from.toISOString()} salesFound=${sales.length} totalSoldQty=${totalSoldQty} totalRevenue=${totalRevenue}`);
+
   return NextResponse.json({
     period: days,
     totalRevenue: Math.round(totalRevenue * 100) / 100,
@@ -84,5 +86,6 @@ export async function GET(req: NextRequest) {
     totalReturnedQty,
     totalStock,
     topVariants,
+    _debug: { salesFound: sales.length, from: from.toISOString() },
   });
 }
