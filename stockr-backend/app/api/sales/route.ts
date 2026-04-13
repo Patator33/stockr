@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
     return start <= now && (!end || end >= now);
   }) || null;
   const effectiveSalePrice = activePromo ? activePromo.price : Number(unitSalePrice ?? variant.salePrice);
+  console.log(`[sale] variant=${variantId} promos=${variant.promotions.length} activePromo=${activePromo?.price ?? 'none'} effectivePrice=${effectiveSalePrice}`);
 
   // Check stock
   const stock = await prisma.stock.findUnique({
