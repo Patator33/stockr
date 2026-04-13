@@ -15,6 +15,7 @@ export default function SalesPage() {
   const [loading,   setLoading]   = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ variantId: '', locationId: '', quantity: 1, unitSalePrice: 0, unitCostPrice: 0, unitShippingCost: 0, notes: '' });
+  const [variantsLoading, setVariantsLoading] = useState(false);
   const [createErr, setCreateErr] = useState('');
 
   const load = (p = 1) => {
@@ -24,13 +25,23 @@ export default function SalesPage() {
 
   useEffect(() => {
     load();
-    wGet<Variant[]>('/api/variants').then(setVariants).catch(() => {});
     wGet<Location[]>('/api/locations').then(locs => {
       setLocations(locs);
       const def = locs.find(l => l.isDefault);
       if (def) setForm(f => ({ ...f, locationId: def.id }));
     }).catch(() => {});
   }, []);
+
+  const openCreate = async () => {
+    setShowCreate(true);
+    setVariantsLoading(true);
+    try {
+      const fresh = await wGet<Variant[]>('/api/variants');
+      setVariants(fresh);
+      // Reset variant selection so user re-picks with fresh data
+      setForm(f => ({ ...f, variantId: '', unitSalePrice: 0, unitCostPrice: 0, unitShippingCost: 0 }));
+    } catch { /* ignore */ } finally { setVariantsLoading(false); }
+  };
 
   const handleVariantChange = (variantId: string) => {
     const v = variants.find(x => x.id === variantId);
@@ -79,7 +90,7 @@ export default function SalesPage() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Ventes</h1>
-        <button onClick={() => setShowCreate(!showCreate)} className="btn-primary">+ Nouvelle vente</button>
+        <button onClick={() => showCreate ? setShowCreate(false) : openCreate()} className="btn-primary">+ Nouvelle vente</button>
       </div>
 
       {showCreate && (
@@ -88,8 +99,8 @@ export default function SalesPage() {
           <form onSubmit={handleCreate} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Variante</label>
-              <select value={form.variantId} onChange={e => handleVariantChange(e.target.value)} required>
-                <option value="">— Sélectionner —</option>
+              <select value={form.variantId} onChange={e => handleVariantChange(e.target.value)} required disabled={variantsLoading}>
+                <option value="">{variantsLoading ? 'Chargement…' : '— Sélectionner —'}</option>
                 {variants.map(v => <option key={v.id} value={v.id}>{v.name}{v.activePromotion ? ` 🏷️ ${v.activePromotion.price.toFixed(2)} €` : ''}</option>)}
               </select>
               {form.variantId && variants.find(v => v.id === form.variantId)?.activePromotion && (

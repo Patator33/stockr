@@ -50,9 +50,21 @@ export async function POST(req: NextRequest) {
   const qty = Number(quantity);
   if (qty <= 0) return NextResponse.json({ error: 'Quantité invalide' }, { status: 400 });
 
-  // Fetch variant prices as defaults if not provided
-  const variant = await prisma.productVariant.findUnique({ where: { id: variantId } });
+  // Fetch variant + active promotion
+  const variant = await prisma.productVariant.findUnique({
+    where: { id: variantId },
+    include: { promotions: true },
+  });
   if (!variant) return NextResponse.json({ error: 'Variante introuvable' }, { status: 404 });
+
+  // Determine effective sale price: active promo > client-provided > variant default
+  const now = new Date();
+  const activePromo = variant.promotions.find(p => {
+    const start = new Date(p.startDate); start.setUTCHours(0, 0, 0, 0);
+    const end = p.endDate ? new Date(p.endDate) : null; if (end) end.setUTCHours(23, 59, 59, 999);
+    return start <= now && (!end || end >= now);
+  }) || null;
+  const effectiveSalePrice = activePromo ? activePromo.price : Number(unitSalePrice ?? variant.salePrice);
 
   // Check stock
   const stock = await prisma.stock.findUnique({
@@ -68,7 +80,7 @@ export async function POST(req: NextRequest) {
         variantId,
         locationId,
         quantity: qty,
-        unitSalePrice: Number(unitSalePrice ?? variant.salePrice),
+        unitSalePrice: effectiveSalePrice,
         unitCostPrice: Number(unitCostPrice ?? variant.costPrice),
         unitShippingCost: Number(unitShippingCost ?? variant.shippingCost),
         vatRate: variant.vatRate,

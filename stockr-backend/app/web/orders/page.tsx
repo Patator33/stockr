@@ -35,6 +35,17 @@ export default function OrdersPage() {
       if (selected) setSelected(arr.find(x => x.id === selected.id) ?? null);
     }).catch(() => {});
 
+  // When selecting an order with no location, auto-assign the default location
+  const selectOrder = (o: Order) => {
+    setSelected(o);
+    if (!o.locationId) {
+      const def = locations.find(l => l.isDefault);
+      if (def) {
+        updateLocation(o.id, def.id);
+      }
+    }
+  };
+
   const filtered = orders.filter(o =>
     filter === 'active'  ? (o.status === 'pending' || o.status === 'prepared') :
     filter === 'shipped' ? o.status === 'shipped' : true
@@ -93,7 +104,7 @@ export default function OrdersPage() {
             const total   = o.items.reduce((s, i) => s + i.quantity, 0);
             const scanned = o.items.reduce((s, i) => s + i.scanned, 0);
             return (
-              <div key={o.id} onClick={() => setSelected(o)}
+              <div key={o.id} onClick={() => selectOrder(o)}
                 style={{ padding: '0.75rem', borderRadius: '0.75rem', border: `1px solid ${selected?.id === o.id ? '#3b82f6' : '#2a3045'}`, background: selected?.id === o.id ? '#1a2035' : '#141824', cursor: 'pointer' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
                   <span className={`badge ${STATUS_COLORS[o.status] || 'badge-confirmed'}`}>{STATUS_LABELS[o.status] || o.status}</span>
