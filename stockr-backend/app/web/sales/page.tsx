@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { wGet, wFetch } from '../_api';
 
 interface Sale { id: string; variantId: string; locationId: string; quantity: number; unitSalePrice: number; unitCostPrice: number; unitShippingCost: number; vatRate: number; notes?: string | null; createdAt: string; variant?: { name: string; product: { name: string } }; location?: { name: string }; returns?: { id: string; quantity: number; reason?: string | null }[]; }
-interface Variant { id: string; name: string; salePrice: number; costPrice: number; shippingCost: number; vatRate: number; activePromotion?: { price: number; startDate: string; endDate?: string | null } | null; }
+interface Variant { id: string; name: string; salePrice: number; costPrice: number; shippingCost: number; vatRate: number; activePromotion?: { price: number; startDate: string; endDate?: string | null } | null; product?: { defaultLocationId?: string | null }; }
 interface Location { id: string; name: string; isDefault?: boolean; }
 interface SalesPage { sales: Sale[]; total: number; pages: number; }
 
@@ -35,7 +35,8 @@ export default function SalesPage() {
   const handleVariantChange = (variantId: string) => {
     const v = variants.find(x => x.id === variantId);
     const price = v?.activePromotion ? v.activePromotion.price : (v?.salePrice || 0);
-    setForm(f => ({ ...f, variantId, unitSalePrice: price, unitCostPrice: v?.costPrice || 0, unitShippingCost: v?.shippingCost || 0 }));
+    const defLoc = v?.product?.defaultLocationId;
+    setForm(f => ({ ...f, variantId, unitSalePrice: price, unitCostPrice: v?.costPrice || 0, unitShippingCost: v?.shippingCost || 0, ...(defLoc ? { locationId: defLoc } : {}) }));
   };
 
   const handleCreate = async (e: React.FormEvent) => {

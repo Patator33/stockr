@@ -10,8 +10,12 @@ export async function GET(req: NextRequest) {
   const now = new Date();
   const withActivePromo = (v: { promotions: { id: string; price: number; startDate: Date | string; endDate: Date | string | null; variantId: string; createdAt: Date | string }[] }) => {
     const active = v.promotions.find(p => {
+      // Normalize startDate to beginning of UTC day
       const start = new Date(p.startDate);
+      start.setUTCHours(0, 0, 0, 0);
+      // Normalize endDate to end of UTC day so "today" stays active all day
       const end = p.endDate ? new Date(p.endDate) : null;
+      if (end) end.setUTCHours(23, 59, 59, 999);
       return start <= now && (!end || end >= now);
     }) || null;
     return { ...v, activePromotion: active };
@@ -29,7 +33,7 @@ export async function GET(req: NextRequest) {
   const where = productId ? { productId } : {};
   const variants = await prisma.productVariant.findMany({
     where,
-    include: { stocks: { include: { location: true } }, promotions: true },
+    include: { stocks: { include: { location: true } }, promotions: true, product: { select: { defaultLocationId: true } } },
     orderBy: { name: 'asc' },
   });
   return NextResponse.json(variants.map(withActivePromo));
