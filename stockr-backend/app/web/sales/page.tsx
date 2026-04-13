@@ -167,7 +167,7 @@ export default function SalesPage() {
                     ...(s.returns || []).map(r => (
                       <tr key={`ret-${r.id}`} style={{ background: '#0f1218' }}>
                         <td></td>
-                        <td colSpan={5} style={{ fontSize: '0.75rem', color: '#64748b', paddingLeft: '2rem' }}>↩ Retour: {r.quantity} · {r.reason || '—'}</td>
+                        <td colSpan={6} style={{ fontSize: '0.75rem', color: '#64748b', paddingLeft: '2rem' }}>↩ Retour: {r.quantity} · {r.reason || '—'}</td>
                         <td></td>
                         <td><button onClick={() => deleteReturn(r.id)} style={{ background: 'none', border: '1px solid #7f1d1d', borderRadius: '0.375rem', color: '#ef4444', fontSize: '0.7rem', padding: '0.2rem 0.4rem' }}>✕</button></td>
                       </tr>
