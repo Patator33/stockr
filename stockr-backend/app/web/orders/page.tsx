@@ -37,13 +37,16 @@ export default function OrdersPage() {
 
   // When selecting an order with no location, auto-assign the default location
   const selectOrder = (o: Order) => {
-    setSelected(o);
     if (!o.locationId) {
       const def = locations.find(l => l.isDefault);
       if (def) {
+        // Update UI immediately, then persist in background
+        setSelected({ ...o, locationId: def.id });
         updateLocation(o.id, def.id);
+        return;
       }
     }
+    setSelected(o);
   };
 
   const filtered = orders.filter(o =>
