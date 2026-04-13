@@ -49,13 +49,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (body.status === 'shipped') {
       const order = await prisma.order.findUnique({
         where: { id },
-        include: { items: { include: { variant: true } } },
+        include: { items: { include: { variant: { include: { promotions: true } } } } },
       });
       if (order?.locationId) {
         const locationId = order.locationId;
+        const now = new Date();
         for (const item of order.items) {
           if (!item.variantId || !item.variant) continue;
           const variant = item.variant;
+          const activePromo = variant.promotions.find(p => {
+            const start = new Date(p.startDate); start.setUTCHours(0, 0, 0, 0);
+            const end = p.endDate ? new Date(p.endDate) : null; if (end) end.setUTCHours(23, 59, 59, 999);
+            return start <= now && (!end || end >= now);
+          }) || null;
+          const effectiveSalePrice = activePromo ? activePromo.price : variant.salePrice;
           await prisma.stock.upsert({
             where: { variantId_locationId: { variantId: item.variantId, locationId } },
             update: { quantity: { decrement: item.quantity } },
@@ -66,9 +73,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
               variantId: item.variantId,
               locationId,
               quantity: item.quantity,
-              unitSalePrice: variant.salePrice,
+              unitSalePrice: effectiveSalePrice,
               unitCostPrice: variant.costPrice,
               unitShippingCost: variant.shippingCost,
+              vatRate: variant.vatRate,
               notes: `Commande ${order.customerName || order.customerEmail || order.id.slice(0, 8)}`,
             },
           });
