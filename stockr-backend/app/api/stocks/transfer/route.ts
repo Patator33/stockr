@@ -4,7 +4,8 @@ import { prisma } from '@/lib/prisma';
 
 // POST /api/stocks/transfer
 export async function POST(req: NextRequest) {
-  try { await requireAuth(req); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
+  let userId: string;
+  try { userId = await requireAuth(req); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
   const { variantId, fromLocationId, toLocationId, quantity, notes } = await req.json();
   if (!variantId || !fromLocationId || !toLocationId || !quantity) {
     return NextResponse.json({ error: 'Tous les champs requis' }, { status: 400 });
@@ -23,23 +24,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Stock insuffisant' }, { status: 400 });
   }
 
-  await prisma.$transaction([
-    // Deduct from source
-    prisma.stock.update({
+  const transfer = await prisma.$transaction(async tx => {
+    await tx.stock.update({
       where: { variantId_locationId: { variantId, locationId: fromLocationId } },
       data: { quantity: { decrement: qty } },
-    }),
-    // Add to destination
-    prisma.stock.upsert({
+    });
+    await tx.stock.upsert({
       where: { variantId_locationId: { variantId, locationId: toLocationId } },
       update: { quantity: { increment: qty } },
       create: { variantId, locationId: toLocationId, quantity: qty },
-    }),
-    // Record transfer
-    prisma.stockTransfer.create({
+    });
+    const t = await tx.stockTransfer.create({
       data: { variantId, fromLocationId, toLocationId, quantity: qty, notes: notes?.trim() || null },
-    }),
-  ]);
+    });
+    await tx.stockMovement.create({
+      data: { variantId, locationId: fromLocationId, type: 'transfer_out', delta: -qty, userId, ref: t.id, notes: notes || null },
+    });
+    await tx.stockMovement.create({
+      data: { variantId, locationId: toLocationId, type: 'transfer_in', delta: qty, userId, ref: t.id, notes: notes || null },
+    });
+    return t;
+  });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, transferId: transfer.id });
 }

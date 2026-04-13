@@ -8,6 +8,7 @@ export async function GET(req: NextRequest) {
   const productId = searchParams.get('productId');
   const from = searchParams.get('from');
   const to = searchParams.get('to');
+  const search = searchParams.get('search');
   const page = Number(searchParams.get('page') || '1');
   const limit = 50;
 
@@ -22,6 +23,13 @@ export async function GET(req: NextRequest) {
       (where.createdAt as Record<string, Date>).lte = toDate;
     }
   }
+  if (search) {
+    where.OR = [
+      { variant: { name: { contains: search } } },
+      { variant: { product: { name: { contains: search } } } },
+      { notes: { contains: search } },
+    ];
+  }
 
   const [sales, total] = await Promise.all([
     prisma.sale.findMany({
@@ -30,6 +38,7 @@ export async function GET(req: NextRequest) {
         variant: { include: { product: { select: { id: true, name: true } } } },
         location: true,
         returns: true,
+        order: { select: { id: true, customerName: true, customerEmail: true } },
       },
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * limit,
@@ -42,7 +51,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  try { await requireAuth(req); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
+  let userId: string;
+  try { userId = await requireAuth(req); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
   const { variantId, locationId, quantity, unitSalePrice, unitCostPrice, unitShippingCost, notes } = await req.json();
   if (!variantId || !locationId || !quantity) {
     return NextResponse.json({ error: 'variantId, locationId et quantity requis' }, { status: 400 });
@@ -92,6 +102,11 @@ export async function POST(req: NextRequest) {
       data: { quantity: { decrement: qty } },
     }),
   ]);
+
+  // Log stock movement (non-blocking)
+  prisma.stockMovement.create({
+    data: { variantId, locationId, type: 'sale', delta: -qty, userId, ref: sale.id },
+  }).catch(() => {});
 
   return NextResponse.json(sale, { status: 201 });
 }

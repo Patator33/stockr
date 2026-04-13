@@ -68,10 +68,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             update: { quantity: { decrement: item.quantity } },
             create: { variantId: item.variantId, locationId, quantity: -item.quantity },
           });
-          await prisma.sale.create({
+          const sale = await prisma.sale.create({
             data: {
               variantId: item.variantId,
               locationId,
+              orderId: order.id,
               quantity: item.quantity,
               unitSalePrice: effectiveSalePrice,
               unitCostPrice: variant.costPrice,
@@ -79,6 +80,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
               vatRate: variant.vatRate,
               notes: `Commande ${order.customerName || order.customerEmail || order.id.slice(0, 8)}`,
             },
+          });
+          // Log stock movement
+          await prisma.stockMovement.create({
+            data: { variantId: item.variantId, locationId, type: 'sale', delta: -item.quantity, userId: session.userId, ref: sale.id, notes: `Commande ${order.id.slice(0, 8)}` },
           });
         }
       }

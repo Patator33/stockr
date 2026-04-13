@@ -3,7 +3,8 @@ import { requireAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 export async function POST(req: NextRequest) {
-  try { await requireAuth(req); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
+  let userId: string;
+  try { userId = await requireAuth(req); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
   const { saleId, quantity, reason, notes } = await req.json();
   if (!saleId || !quantity) return NextResponse.json({ error: 'saleId et quantity requis' }, { status: 400 });
 
@@ -27,6 +28,11 @@ export async function POST(req: NextRequest) {
       create: { variantId: sale.variantId, locationId: sale.locationId, quantity: qty },
     }),
   ]);
+
+  // Log stock movement (non-blocking)
+  prisma.stockMovement.create({
+    data: { variantId: sale.variantId, locationId: sale.locationId, type: 'return', delta: qty, userId, ref: saleId, notes: reason?.trim() || null },
+  }).catch(() => {});
 
   return NextResponse.json(ret, { status: 201 });
 }

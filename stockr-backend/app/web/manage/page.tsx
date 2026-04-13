@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { wGet, wFetch } from '../_api';
 
 interface Product  { id: string; name: string; description?: string | null; defaultLocationId?: string | null; _count?: { variants: number }; }
-interface Variant  { id: string; name: string; attributes: string; costPrice: number; salePrice: number; shippingCost: number; vatRate: number; barcode?: string | null; supplierRef?: string | null; stocks?: { quantity: number; location: { name: string } }[]; activePromotion?: Promotion | null; }
+interface Variant  { id: string; name: string; attributes: string; costPrice: number; salePrice: number; shippingCost: number; vatRate: number; barcode?: string | null; supplierRef?: string | null; lowStockThreshold?: number | null; stocks?: { quantity: number; location: { name: string } }[]; activePromotion?: Promotion | null; }
 interface Promotion { id: string; variantId: string; price: number; startDate: string; endDate?: string | null; }
 interface Attr     { key: string; value: string; }
 interface Location { id: string; name: string; description?: string | null; isDefault?: boolean; }
@@ -43,8 +43,8 @@ export default function ManagePage() {
 }
 
 /* ─── Variant form (shared by create + edit) ─── */
-interface VFormData { name: string; costPrice: number; salePrice: number; shippingCost: number; vatRate: number; barcode: string; supplierRef: string; attrs: Attr[]; }
-const emptyVForm = (): VFormData => ({ name:'', costPrice:0, salePrice:0, shippingCost:0, vatRate:20, barcode:'', supplierRef:'', attrs:[{ key:'', value:'' }] });
+interface VFormData { name: string; costPrice: number; salePrice: number; shippingCost: number; vatRate: number; barcode: string; supplierRef: string; lowStockThreshold: string; attrs: Attr[]; }
+const emptyVForm = (): VFormData => ({ name:'', costPrice:0, salePrice:0, shippingCost:0, vatRate:20, barcode:'', supplierRef:'', lowStockThreshold:'', attrs:[{ key:'', value:'' }] });
 
 function VariantForm({
   title, initial, attrKeys, onSubmit, onCancel, error, loading,
@@ -110,6 +110,7 @@ function VariantForm({
       <div><label style={{ fontSize:'0.7rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>TVA %</label><input type="number" step="0.1" min="0" max="100" value={f.vatRate} onChange={e => setF(p=>({...p,vatRate:Number(e.target.value)}))} /></div>
       <div><label style={{ fontSize:'0.7rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Code barre</label><input value={f.barcode} onChange={e => setF(p=>({...p,barcode:e.target.value}))} /></div>
       <div><label style={{ fontSize:'0.7rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Réf. fournisseur</label><input value={f.supplierRef} onChange={e => setF(p=>({...p,supplierRef:e.target.value}))} /></div>
+      <div><label style={{ fontSize:'0.7rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Alerte stock bas (seuil)</label><input type="number" min="0" step="1" value={f.lowStockThreshold} onChange={e => setF(p=>({...p,lowStockThreshold:e.target.value}))} placeholder="ex: 5" /></div>
 
       {error && <p style={{ gridColumn:'1 / -1', margin:0, color:'#ef4444', fontSize:'0.8125rem' }}>{error}</p>}
       <div style={{ gridColumn:'1 / -1', display:'flex', gap:'0.5rem' }}>
@@ -135,11 +136,17 @@ function ProductsTab() {
   const [vError,    setVError]    = useState('');
   const [vLoading,  setVLoading]  = useState(false);
 
-  // Promotions
+  // Promotions (per variant)
   const [promoV,    setPromoV]    = useState<string | null>(null); // variantId showing promo panel
   const [promos,    setPromos]    = useState<Record<string, Promotion[]>>({});
   const [promoForm, setPromoForm] = useState({ price:'', startDate: new Date().toISOString().slice(0,10), endDate:'' });
   const [promoErr,  setPromoErr]  = useState('');
+
+  // Product-level promo
+  const [showProductPromo, setShowProductPromo] = useState(false);
+  const [productPromoForm, setProductPromoForm] = useState({ price:'', startDate: new Date().toISOString().slice(0,10), endDate:'' });
+  const [productPromoErr,  setProductPromoErr]  = useState('');
+  const [productPromoOk,   setProductPromoOk]   = useState('');
 
   const loadPromos = (variantId: string) =>
     wGet<Promotion[]>(`/api/promotions?variantId=${variantId}`)
@@ -169,6 +176,19 @@ function ProductsTab() {
     await wFetch(`/api/promotions/${promoId}`, { method:'DELETE' });
     loadPromos(variantId);
     if (selected) loadVariants(selected.id);
+  };
+
+  const createProductPromo = async () => {
+    if (!selected) return;
+    setProductPromoErr(''); setProductPromoOk('');
+    if (!productPromoForm.price) { setProductPromoErr('Prix requis'); return; }
+    const body = { productId: selected.id, price: Number(productPromoForm.price), startDate: productPromoForm.startDate, endDate: productPromoForm.endDate || null };
+    const res = await wFetch('/api/promotions/product', { method:'POST', body:JSON.stringify(body) });
+    const d = await res.json();
+    if (!res.ok) { setProductPromoErr(d.error || 'Erreur'); return; }
+    setProductPromoOk(`✓ Promotion créée pour ${d.created} variante${d.created !== 1 ? 's' : ''}`);
+    setProductPromoForm({ price:'', startDate: new Date().toISOString().slice(0,10), endDate:'' });
+    loadVariants(selected.id);
   };
 
   const loadProducts = () => wGet<Product[]>('/api/products').then(setProducts).catch(()=>{});
@@ -207,6 +227,7 @@ function ProductsTab() {
       productId:selected.id, name:f.name, attributes:f.attrs.filter(a=>a.key&&a.value),
       costPrice:f.costPrice, salePrice:f.salePrice, shippingCost:f.shippingCost, vatRate:f.vatRate,
       barcode:f.barcode||null, supplierRef:f.supplierRef||null,
+      lowStockThreshold: f.lowStockThreshold !== '' ? Number(f.lowStockThreshold) : null,
     })});
     const d = await res.json();
     setVLoading(false);
@@ -221,6 +242,7 @@ function ProductsTab() {
       name:f.name, attributes:f.attrs.filter(a=>a.key&&a.value),
       costPrice:f.costPrice, salePrice:f.salePrice, shippingCost:f.shippingCost, vatRate:f.vatRate,
       barcode:f.barcode||null, supplierRef:f.supplierRef||null,
+      lowStockThreshold: f.lowStockThreshold !== '' ? Number(f.lowStockThreshold) : null,
     })});
     const d = await res.json();
     setVLoading(false);
@@ -289,9 +311,25 @@ function ProductsTab() {
                 {selected.description && <p style={{ margin:0, fontSize:'0.875rem', color:'#64748b' }}>{selected.description}</p>}
               </div>
               <div style={{ display:'flex', gap:'0.5rem' }}>
+                <button onClick={() => { setShowProductPromo(!showProductPromo); setProductPromoErr(''); setProductPromoOk(''); }} className="btn-ghost" style={{ fontSize:'0.75rem', color: showProductPromo ? '#f59e0b' : undefined }}>🏷️ Promo produit</button>
                 <button onClick={() => setEditP(selected)} className="btn-ghost" style={{ fontSize:'0.75rem' }}>Modifier</button>
                 <button onClick={() => deleteProduct(selected.id)} className="btn-danger" style={{ fontSize:'0.75rem' }}>Supprimer</button>
               </div>
+            </div>
+          )}
+
+          {/* Product promo panel */}
+          {showProductPromo && (
+            <div style={{ background:'#0a0e1a', border:'1px solid rgba(245,158,11,0.3)', borderRadius:'0.5rem', padding:'0.75rem', marginBottom:'1rem' }}>
+              <p style={{ margin:'0 0 0.5rem', fontSize:'0.8125rem', fontWeight:700, color:'#f59e0b' }}>🏷️ Promotion sur toutes les variantes de "{selected.name}"</p>
+              <div style={{ display:'flex', gap:'0.5rem', alignItems:'flex-end', flexWrap:'wrap' }}>
+                <div><label style={{ fontSize:'0.7rem', color:'#64748b', display:'block', marginBottom:'0.2rem' }}>Prix promo €</label><input type="number" step="0.01" value={productPromoForm.price} onChange={e=>setProductPromoForm(p=>({...p,price:e.target.value}))} style={{ width:'7rem' }} /></div>
+                <div><label style={{ fontSize:'0.7rem', color:'#64748b', display:'block', marginBottom:'0.2rem' }}>Début</label><input type="date" value={productPromoForm.startDate} onChange={e=>setProductPromoForm(p=>({...p,startDate:e.target.value}))} style={{ width:'9rem' }} /></div>
+                <div><label style={{ fontSize:'0.7rem', color:'#64748b', display:'block', marginBottom:'0.2rem' }}>Fin (optionnel)</label><input type="date" value={productPromoForm.endDate} onChange={e=>setProductPromoForm(p=>({...p,endDate:e.target.value}))} style={{ width:'9rem' }} /></div>
+                <button onClick={createProductPromo} className="btn-primary" style={{ fontSize:'0.75rem', padding:'0.375rem 0.75rem' }}>Créer pour toutes</button>
+              </div>
+              {productPromoErr && <p style={{ margin:'0.25rem 0 0', color:'#ef4444', fontSize:'0.75rem' }}>{productPromoErr}</p>}
+              {productPromoOk  && <p style={{ margin:'0.25rem 0 0', color:'#22c55e', fontSize:'0.75rem' }}>{productPromoOk}</p>}
             </div>
           )}
 
@@ -328,7 +366,9 @@ function ProductsTab() {
                       <td style={{ fontSize:'0.8125rem', color:'#3b82f6' }}>{v.salePrice.toFixed(2)} €</td>
                       <td style={{ fontSize:'0.75rem', color:'#64748b' }}>{(v.vatRate??20).toFixed(0)} %</td>
                       <td style={{ fontSize:'0.75rem', color:'#64748b' }}>{v.barcode||'—'}</td>
-                      <td style={{ fontWeight:700, color:totalStock>0?'#22c55e':totalStock<0?'#ef4444':'#64748b' }}>{totalStock}</td>
+                      <td style={{ fontWeight:700, color: v.lowStockThreshold != null && totalStock <= v.lowStockThreshold ? '#f59e0b' : totalStock>0?'#22c55e':totalStock<0?'#ef4444':'#64748b' }}>
+                        {totalStock}{v.lowStockThreshold != null && <span style={{ fontSize:'0.65rem', color:'#64748b', marginLeft:'0.25rem' }}>/{v.lowStockThreshold}</span>}
+                      </td>
                       <td>
                         <div style={{ display:'flex', gap:'0.25rem' }}>
                           <button onClick={() => openPromos(v.id)}
@@ -379,6 +419,7 @@ function ProductsTab() {
                             initial={{
                               name:v.name, costPrice:v.costPrice, salePrice:v.salePrice, shippingCost:v.shippingCost, vatRate:v.vatRate??20,
                               barcode:v.barcode||'', supplierRef:v.supplierRef||'',
+                              lowStockThreshold: v.lowStockThreshold != null ? String(v.lowStockThreshold) : '',
                               attrs:attrs.length>0?attrs:[{key:'',value:''}],
                             }}
                             attrKeys={attrKeys}

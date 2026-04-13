@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
   let totalSoldQty = 0;
   let totalVat = 0;
   const variantStats: Record<string, { name: string; productName: string; sold: number; returned: number; revenue: number; margin: number }> = {};
+  const dailyMap: Record<string, number> = {};
 
   for (const sale of sales) {
     const returnedQty = sale.returns.reduce((sum, r) => sum + r.quantity, 0);
@@ -47,6 +48,10 @@ export async function GET(req: NextRequest) {
     totalReturnedQty += returnedQty;
     totalSoldQty += sale.quantity;
     totalVat += vat;
+
+    // Daily aggregation
+    const dateKey = new Date(sale.createdAt).toISOString().slice(0, 10);
+    dailyMap[dateKey] = (dailyMap[dateKey] || 0) + revenue;
 
     const vId = sale.variantId;
     if (!variantStats[vId]) {
@@ -72,10 +77,44 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 10);
 
+  // Build daily revenue array (fill missing days with 0)
+  const dailyRevenue: { date: string; revenue: number }[] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    dailyRevenue.push({ date: key, revenue: Math.round((dailyMap[key] || 0) * 100) / 100 });
+  }
+
   // Stock total
   const stockWhere = productId ? { variant: { productId } } : {};
   const stockAgg = await prisma.stock.aggregate({ where: stockWhere, _sum: { quantity: true } });
   const totalStock = stockAgg._sum.quantity || 0;
+
+  // Low stock alerts
+  const lowStockVariants = await prisma.productVariant.findMany({
+    where: {
+      lowStockThreshold: { not: null },
+      stocks: { some: {} },
+    },
+    include: {
+      stocks: { include: { location: { select: { name: true } } } },
+      product: { select: { name: true } },
+    },
+  });
+  const lowStockAlerts = lowStockVariants
+    .map(v => {
+      const totalQty = v.stocks.reduce((s, st) => s + st.quantity, 0);
+      return { variantId: v.id, variantName: v.name, productName: v.product.name, totalQty, threshold: v.lowStockThreshold! };
+    })
+    .filter(a => a.totalQty <= a.threshold);
+
+  // Overdue orders (pending > 7 days)
+  const overdueFrom = new Date();
+  overdueFrom.setDate(overdueFrom.getDate() - 7);
+  const overdueOrders = await prisma.order.count({
+    where: { status: 'pending', createdAt: { lt: overdueFrom } },
+  });
 
   console.log(`[stats] productId=${productId} period=${days}d from=${from.toISOString()} salesFound=${sales.length} totalSoldQty=${totalSoldQty} totalRevenue=${totalRevenue}`);
 
@@ -91,6 +130,9 @@ export async function GET(req: NextRequest) {
     totalReturnedQty,
     totalStock,
     topVariants,
+    dailyRevenue,
+    lowStockAlerts,
+    overdueOrders,
     _debug: { salesFound: sales.length, from: from.toISOString() },
   });
 }

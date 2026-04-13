@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try { await requireAuth(req); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
-  const { productId, name, attributes, costPrice, salePrice, shippingCost, vatRate, barcode, supplierRef } = await req.json();
+  const { productId, name, attributes, costPrice, salePrice, shippingCost, vatRate, barcode, supplierRef, lowStockThreshold } = await req.json();
   if (!productId || !name?.trim()) {
     return NextResponse.json({ error: 'productId et nom requis' }, { status: 400 });
   }
@@ -56,6 +56,7 @@ export async function POST(req: NextRequest) {
       vatRate: Number(vatRate ?? 20),
       barcode: barcode?.trim() || null,
       supplierRef: supplierRef?.trim() || null,
+      lowStockThreshold: lowStockThreshold !== undefined && lowStockThreshold !== '' ? Number(lowStockThreshold) : null,
     },
   });
   return NextResponse.json(variant, { status: 201 });

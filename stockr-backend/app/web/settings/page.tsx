@@ -1,8 +1,8 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../_auth';
-import { wGet, wFetch, clearWebToken } from '../_api';
+import { wGet, wFetch, clearWebToken, getWebToken } from '../_api';
 
 interface UserProfile { id: string; email: string; role: string; createdAt: string; }
 interface AuditLog { id: string; userEmail?: string | null; action: string; details?: string | null; createdAt: string; }
@@ -32,6 +32,15 @@ export default function SettingsPage() {
   const [userError,   setUserError]   = useState('');
   const [userLoading, setUserLoading] = useState(false);
 
+  // App settings
+  const [defaultVatRate, setDefaultVatRate] = useState('20');
+  const [settingsSaved, setSettingsSaved]   = useState(false);
+
+  // Backup/restore
+  const [backupMsg,  setBackupMsg]  = useState('');
+  const [restoring,  setRestoring]  = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const loadLogs = () => {
     setLogsLoading(true);
     wGet<{ logs: AuditLog[]; total: number }>('/api/logs?limit=100')
@@ -41,10 +50,19 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
+    wGet<Record<string, string>>('/api/settings').then(s => {
+      if (s.defaultVatRate) setDefaultVatRate(s.defaultVatRate);
+    }).catch(() => {});
     if (!isAdmin) return;
     wGet<UserProfile[]>('/api/users').then(setUsers).catch(() => {});
     loadLogs();
   }, [isAdmin]);
+
+  const saveSettings = async () => {
+    await wFetch('/api/settings', { method: 'PATCH', body: JSON.stringify({ defaultVatRate }) });
+    setSettingsSaved(true);
+    setTimeout(() => setSettingsSaved(false), 2000);
+  };
 
   const createUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,6 +97,40 @@ export default function SettingsPage() {
     router.replace('/web/login');
   };
 
+  const downloadBackup = () => {
+    const token = getWebToken();
+    fetch('/api/backup', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then(r => r.blob())
+      .then(blob => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `stockr_backup_${new Date().toISOString().slice(0, 10)}.db`;
+        a.click();
+        setBackupMsg('Sauvegarde téléchargée.');
+      })
+      .catch(() => setBackupMsg('Erreur lors de la sauvegarde.'));
+  };
+
+  const handleRestoreFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!confirm(`Restaurer la base depuis "${file.name}" ? L'application sera rechargée après la restauration.`)) return;
+    setRestoring(true);
+    setBackupMsg('');
+    try {
+      const token = getWebToken();
+      const res = await fetch('/api/backup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: await file.arrayBuffer(),
+      });
+      const d = await res.json();
+      if (!res.ok) { setBackupMsg(d.error || 'Erreur'); return; }
+      setBackupMsg(d.message);
+    } catch (err) { setBackupMsg(err instanceof Error ? err.message : 'Erreur'); }
+    finally { setRestoring(false); if (fileInputRef.current) fileInputRef.current.value = ''; }
+  };
+
   return (
     <div style={{ maxWidth: '52rem' }}>
       <h1 style={{ margin: '0 0 1.5rem', fontSize: '1.25rem', fontWeight: 800 }}>Réglages</h1>
@@ -90,6 +142,45 @@ export default function SettingsPage() {
           {auth?.role === 'admin' ? '★ Administrateur' : 'Utilisateur'}
         </p>
         <button onClick={handleLogout} className="btn-danger">Se déconnecter</button>
+      </div>
+
+      {/* App settings */}
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ margin: '0 0 1rem', fontSize: '1rem', fontWeight: 700 }}>⚙️ Paramètres de l'application</h2>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div>
+            <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>TVA par défaut (%)</label>
+            <input type="number" step="0.1" min="0" max="100" value={defaultVatRate} onChange={e => setDefaultVatRate(e.target.value)} style={{ width: '8rem' }} />
+          </div>
+          <button onClick={saveSettings} className="btn-primary" style={{ fontSize: '0.8125rem' }}>
+            {settingsSaved ? '✓ Sauvegardé' : 'Sauvegarder'}
+          </button>
+        </div>
+        <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#475569' }}>
+          Note: ce taux s'applique aux nouvelles variantes. Chaque variante peut avoir son propre taux.
+        </p>
+      </div>
+
+      {/* Backup & Restore */}
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ margin: '0 0 1rem', fontSize: '1rem', fontWeight: 700 }}>💾 Sauvegarde &amp; Restauration</h2>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <button onClick={downloadBackup} className="btn-primary" style={{ fontSize: '0.8125rem' }}>
+            ⬇ Télécharger la sauvegarde
+          </button>
+          <button onClick={() => fileInputRef.current?.click()} className="btn-ghost" style={{ fontSize: '0.8125rem' }} disabled={restoring}>
+            {restoring ? '…' : '⬆ Restaurer depuis un fichier'}
+          </button>
+          <input ref={fileInputRef} type="file" accept=".db" style={{ display: 'none' }} onChange={handleRestoreFile} />
+        </div>
+        {backupMsg && (
+          <p style={{ margin: '0.75rem 0 0', fontSize: '0.8125rem', color: backupMsg.startsWith('Err') ? '#ef4444' : '#22c55e' }}>
+            {backupMsg}
+          </p>
+        )}
+        <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#475569' }}>
+          Sauvegarde = fichier SQLite complet. Restaurer remplace toute la base — opération irréversible.
+        </p>
       </div>
 
       {isAdmin && (

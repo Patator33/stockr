@@ -5,18 +5,29 @@ import { wGet, wFetch } from '../_api';
 interface OrderItem { id: string; variantName: string; quantity: number; scanned: number; barcode?: string | null; variantId?: string | null; }
 interface Order { id: string; status: string; customerName?: string | null; customerEmail?: string | null; notes?: string | null; shippingDate?: string | null; locationId?: string | null; items: OrderItem[]; createdAt: string; }
 interface Location { id: string; name: string; isDefault?: boolean; }
+interface Variant { id: string; name: string; barcode?: string | null; supplierRef?: string | null; }
 
 const STATUS_LABELS: Record<string, string> = { pending: 'En attente', confirmed: 'Confirmée', prepared: 'Préparée', shipped: 'Expédiée' };
 const STATUS_COLORS: Record<string, string> = { pending: 'badge-pending', confirmed: 'badge-confirmed', prepared: 'badge-prepared', shipped: 'badge-shipped' };
 
+interface NewOrderItem { variantId: string; variantName: string; quantity: number; }
+
 export default function OrdersPage() {
   const [orders,    setOrders]    = useState<Order[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [variants,  setVariants]  = useState<Variant[]>([]);
   const [filter,    setFilter]    = useState('active');
   const [selected,  setSelected]  = useState<Order | null>(null);
   const [loading,   setLoading]   = useState(true);
   const [barcode,   setBarcode]   = useState('');
   const [barcodeMsg, setBarcodeMsg] = useState('');
+
+  // New order creation state
+  const [showCreate, setShowCreate] = useState(false);
+  const [newOrder, setNewOrder] = useState({ customerName: '', customerEmail: '', notes: '', shippingDate: '', locationId: '' });
+  const [newItems, setNewItems] = useState<NewOrderItem[]>([{ variantId: '', variantName: '', quantity: 1 }]);
+  const [createErr, setCreateErr] = useState('');
+  const [createLoading, setCreateLoading] = useState(false);
 
   const loadAll = () =>
     Promise.all([
@@ -25,9 +36,14 @@ export default function OrdersPage() {
     ]).then(([o, l]) => {
       setOrders(o);
       setLocations(l);
+      const def = l.find(x => x.isDefault);
+      setNewOrder(f => ({ ...f, locationId: def?.id || '' }));
     }).catch(() => {}).finally(() => setLoading(false));
 
-  useEffect(() => { loadAll(); }, []);
+  useEffect(() => {
+    loadAll();
+    wGet<Variant[]>('/api/variants').then(setVariants).catch(() => {});
+  }, []);
 
   const refresh = () =>
     wGet<Order[]>('/api/orders').then(arr => {
@@ -35,12 +51,10 @@ export default function OrdersPage() {
       if (selected) setSelected(arr.find(x => x.id === selected.id) ?? null);
     }).catch(() => {});
 
-  // When selecting an order with no location, auto-assign the default location
   const selectOrder = (o: Order) => {
     if (!o.locationId) {
       const def = locations.find(l => l.isDefault);
       if (def) {
-        // Update UI immediately, then persist in background
         setSelected({ ...o, locationId: def.id });
         updateLocation(o.id, def.id);
         return;
@@ -89,6 +103,50 @@ export default function OrdersPage() {
     await refresh();
   };
 
+  const handleCreateOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreateErr('');
+    setCreateLoading(true);
+    try {
+      const items = newItems
+        .filter(i => i.variantId || i.variantName)
+        .map(i => {
+          const v = variants.find(x => x.id === i.variantId);
+          return { variantName: i.variantName || v?.name || '', quantity: i.quantity, barcode: v?.barcode || undefined };
+        });
+      if (items.length === 0) { setCreateErr('Ajoutez au moins un article'); setCreateLoading(false); return; }
+      const res = await wFetch('/api/orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...newOrder,
+          source: 'web',
+          shippingDate: newOrder.shippingDate || null,
+          items,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setCreateErr(d.error || 'Erreur'); setCreateLoading(false); return; }
+      setShowCreate(false);
+      setNewOrder({ customerName: '', customerEmail: '', notes: '', shippingDate: '', locationId: locations.find(l => l.isDefault)?.id || '' });
+      setNewItems([{ variantId: '', variantName: '', quantity: 1 }]);
+      await loadAll();
+      selectOrder(d);
+    } catch (err) { setCreateErr(err instanceof Error ? err.message : 'Erreur'); }
+    finally { setCreateLoading(false); }
+  };
+
+  const setNewItem = (i: number, field: keyof NewOrderItem, val: string | number) => {
+    setNewItems(prev => prev.map((it, idx) => {
+      if (idx !== i) return it;
+      const updated = { ...it, [field]: val };
+      if (field === 'variantId') {
+        const v = variants.find(x => x.id === val);
+        if (v) updated.variantName = v.name;
+      }
+      return updated;
+    }));
+  };
+
   return (
     <div style={{ display: 'flex', gap: '1.5rem', height: 'calc(100vh - 3rem)' }}>
       {/* List */}
@@ -101,11 +159,17 @@ export default function OrdersPage() {
             </button>
           ))}
         </div>
+
+        <button onClick={() => setShowCreate(!showCreate)} className="btn-primary" style={{ fontSize: '0.8125rem' }}>
+          {showCreate ? '✕ Annuler' : '+ Nouvelle commande'}
+        </button>
+
         <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           {loading && <p style={{ color: '#475569', fontSize: '0.875rem' }}>Chargement…</p>}
           {filtered.map(o => {
             const total   = o.items.reduce((s, i) => s + i.quantity, 0);
             const scanned = o.items.reduce((s, i) => s + i.scanned, 0);
+            const ageDays = Math.floor((Date.now() - new Date(o.createdAt).getTime()) / 86400000);
             return (
               <div key={o.id} onClick={() => selectOrder(o)}
                 style={{ padding: '0.75rem', borderRadius: '0.75rem', border: `1px solid ${selected?.id === o.id ? '#3b82f6' : '#2a3045'}`, background: selected?.id === o.id ? '#1a2035' : '#141824', cursor: 'pointer' }}>
@@ -114,7 +178,10 @@ export default function OrdersPage() {
                   <span style={{ fontSize: '0.7rem', color: '#475569' }}>{new Date(o.createdAt).toLocaleDateString('fr-FR')}</span>
                 </div>
                 <p style={{ margin: '0 0 0.125rem', fontSize: '0.875rem', color: '#e2e8f0', fontWeight: 600 }}>{o.customerName || o.customerEmail || 'Client'}</p>
-                <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748b' }}>{total} art. · {scanned} scanné{scanned !== 1 ? 's' : ''}</p>
+                <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'center' }}>
+                  <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748b' }}>{total} art. · {scanned} scanné{scanned !== 1 ? 's' : ''}</p>
+                  {ageDays >= 7 && o.status === 'pending' && <span style={{ fontSize: '0.65rem', color: '#ef4444', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.25rem', padding: '0.05rem 0.3rem' }}>J+{ageDays}</span>}
+                </div>
                 {o.shippingDate && <p style={{ margin: '0.125rem 0 0', fontSize: '0.7rem', color: '#f59e0b' }}>📅 {new Date(o.shippingDate).toLocaleDateString('fr-FR')}</p>}
               </div>
             );
@@ -122,8 +189,66 @@ export default function OrdersPage() {
         </div>
       </div>
 
-      {/* Detail */}
-      {selected ? (
+      {/* Create form or Detail */}
+      {showCreate ? (
+        <div className="card" style={{ flex: 1, overflowY: 'auto' }}>
+          <h2 style={{ margin: '0 0 1rem', fontSize: '1rem', fontWeight: 700 }}>Nouvelle commande</h2>
+          <form onSubmit={handleCreateOrder} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Nom client</label>
+                <input value={newOrder.customerName} onChange={e => setNewOrder(f => ({ ...f, customerName: e.target.value }))} placeholder="Nom…" />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Email client</label>
+                <input type="email" value={newOrder.customerEmail} onChange={e => setNewOrder(f => ({ ...f, customerEmail: e.target.value }))} placeholder="email@…" />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Date d'expédition</label>
+                <input type="date" value={newOrder.shippingDate} onChange={e => setNewOrder(f => ({ ...f, shippingDate: e.target.value }))} />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Zone de stockage</label>
+                <select value={newOrder.locationId} onChange={e => setNewOrder(f => ({ ...f, locationId: e.target.value }))}>
+                  <option value="">— Aucune —</option>
+                  {locations.map(l => <option key={l.id} value={l.id}>{l.isDefault ? '★ ' : ''}{l.name}</option>)}
+                </select>
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Notes</label>
+                <input value={newOrder.notes} onChange={e => setNewOrder(f => ({ ...f, notes: e.target.value }))} placeholder="Notes…" />
+              </div>
+            </div>
+
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <label style={{ fontSize: '0.75rem', color: '#64748b' }}>Articles</label>
+                <button type="button" onClick={() => setNewItems(p => [...p, { variantId: '', variantName: '', quantity: 1 }])}
+                  style={{ background: 'none', border: 'none', color: '#3b82f6', fontSize: '0.75rem', cursor: 'pointer' }}>+ Ajouter article</button>
+              </div>
+              {newItems.map((item, i) => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '0.5rem', marginBottom: '0.375rem', alignItems: 'end' }}>
+                  <select value={item.variantId} onChange={e => setNewItem(i, 'variantId', e.target.value)}>
+                    <option value="">— Variante —</option>
+                    {variants.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                  </select>
+                  <input type="number" min={1} value={item.quantity} onChange={e => setNewItem(i, 'quantity', Number(e.target.value))} style={{ width: '5rem' }} />
+                  {newItems.length > 1 && (
+                    <button type="button" onClick={() => setNewItems(p => p.filter((_, idx) => idx !== i))}
+                      style={{ background: 'none', border: '1px solid #7f1d1d', borderRadius: '0.375rem', color: '#ef4444', fontSize: '0.75rem', padding: '0.375rem 0.5rem' }}>✕</button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {createErr && <p style={{ margin: 0, color: '#ef4444', fontSize: '0.875rem' }}>{createErr}</p>}
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button type="submit" className="btn-primary" disabled={createLoading}>{createLoading ? '…' : 'Créer la commande'}</button>
+              <button type="button" onClick={() => setShowCreate(false)} className="btn-ghost">Annuler</button>
+            </div>
+          </form>
+        </div>
+      ) : selected ? (
         <div className="card" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
@@ -184,7 +309,7 @@ export default function OrdersPage() {
         </div>
       ) : (
         <div className="card" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <p style={{ color: '#475569' }}>Sélectionnez une commande</p>
+          <p style={{ color: '#475569' }}>Sélectionnez une commande ou créez-en une</p>
         </div>
       )}
     </div>

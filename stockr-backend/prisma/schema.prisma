@@ -38,37 +38,40 @@ model Product {
 }
 
 model ProductVariant {
-  id           String          @id @default(uuid())
-  productId    String
-  product      Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
-  name         String
-  attributes   String          @default("[]")
-  costPrice    Float           @default(0)
-  salePrice    Float           @default(0)
-  shippingCost Float           @default(0)
-  vatRate      Float           @default(20)
-  barcode      String?         @unique
-  supplierRef  String?         @unique
-  stocks       Stock[]
-  sales        Sale[]
-  transfers    StockTransfer[]
-  orderItems   OrderItem[]
-  promotions   Promotion[]
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  id                String          @id @default(uuid())
+  productId         String
+  product           Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name              String
+  attributes        String          @default("[]")
+  costPrice         Float           @default(0)
+  salePrice         Float           @default(0)
+  shippingCost      Float           @default(0)
+  vatRate           Float           @default(20)
+  barcode           String?         @unique
+  supplierRef       String?         @unique
+  lowStockThreshold Int?
+  stocks            Stock[]
+  sales             Sale[]
+  transfers         StockTransfer[]
+  orderItems        OrderItem[]
+  promotions        Promotion[]
+  stockMovements    StockMovement[]
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 }
 
 model StorageLocation {
-  id            String          @id @default(uuid())
-  name          String
-  description   String?
-  isDefault     Boolean         @default(false)
-  stocks        Stock[]
-  transfersFrom StockTransfer[] @relation("FromLocation")
-  transfersTo   StockTransfer[] @relation("ToLocation")
-  sales         Sale[]
-  orders        Order[]
-  createdAt     DateTime        @default(now())
+  id             String          @id @default(uuid())
+  name           String
+  description    String?
+  isDefault      Boolean         @default(false)
+  stocks         Stock[]
+  transfersFrom  StockTransfer[] @relation("FromLocation")
+  transfersTo    StockTransfer[] @relation("ToLocation")
+  sales          Sale[]
+  orders         Order[]
+  stockMovements StockMovement[]
+  createdAt      DateTime        @default(now())
 }
 
 model Stock {
@@ -102,6 +105,8 @@ model Sale {
   variant          ProductVariant  @relation(fields: [variantId], references: [id])
   locationId       String
   location         StorageLocation @relation(fields: [locationId], references: [id])
+  orderId          String?
+  order            Order?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
   quantity         Int
   unitSalePrice    Float
   unitCostPrice    Float
@@ -133,18 +138,19 @@ model Return {
 }
 
 model Order {
-  id              String      @id @default(uuid())
-  source          String      @default("n8n")
+  id              String           @id @default(uuid())
+  source          String           @default("n8n")
   customerName    String?
   customerEmail   String?
   notes           String?
-  status          String      @default("pending")
+  status          String           @default("pending")
   shippingDate    DateTime?
   locationId      String?
   location        StorageLocation? @relation(fields: [locationId], references: [id])
   items           OrderItem[]
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  sales           Sale[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 }
 
 model OrderItem {
@@ -157,4 +163,24 @@ model OrderItem {
   variantName String
   quantity    Int
   scanned     Int             @default(0)
+}
+
+model StockMovement {
+  id         String          @id @default(uuid())
+  variantId  String
+  variant    ProductVariant  @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  locationId String
+  location   StorageLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  type       String          // adjust, transfer_in, transfer_out, sale, return, import
+  delta      Int             // positive = stock in, negative = stock out
+  userId     String?
+  ref        String?         // orderId, saleId, or transferId
+  notes      String?
+  createdAt  DateTime        @default(now())
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
 }

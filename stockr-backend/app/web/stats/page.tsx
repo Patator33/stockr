@@ -2,7 +2,8 @@
 import { useEffect, useState } from 'react';
 import { wGet } from '../_api';
 
-interface Stats { period: number; totalRevenue: number; totalCost: number; totalShipping: number; grossMargin: number; netMargin: number; totalVat: number; totalSoldQty: number; totalReturnedQty: number; totalStock: number; topVariants: { name: string; productName: string; sold: number; returned: number; revenue: number; margin: number }[]; }
+interface DailyRevenue { date: string; revenue: number; }
+interface Stats { period: number; totalRevenue: number; totalCost: number; totalShipping: number; grossMargin: number; netMargin: number; totalVat: number; totalSoldQty: number; totalReturnedQty: number; totalStock: number; topVariants: { name: string; productName: string; sold: number; returned: number; revenue: number; margin: number }[]; dailyRevenue: DailyRevenue[]; }
 interface Product { id: string; name: string; }
 
 function Card({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
@@ -11,6 +12,50 @@ function Card({ label, value, sub, color }: { label: string; value: string; sub?
       <p style={{ margin: '0 0 0.25rem', fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</p>
       <p style={{ margin: 0, fontSize: '1.375rem', fontWeight: 800, color: color || '#e2e8f0' }}>{value}</p>
       {sub && <p style={{ margin: '0.25rem 0 0', fontSize: '0.7rem', color: '#64748b' }}>{sub}</p>}
+    </div>
+  );
+}
+
+function RevenueChart({ data, period }: { data: DailyRevenue[]; period: string }) {
+  if (!data || data.length === 0) return null;
+  const max = Math.max(...data.map(d => d.revenue), 1);
+  const W = 640, H = 120, PAD = 8;
+  const barW = Math.max(1, Math.floor((W - PAD * 2) / data.length) - 2);
+
+  // Show only some date labels to avoid crowding
+  const step = data.length <= 14 ? 1 : data.length <= 30 ? 7 : 30;
+
+  return (
+    <div className="card" style={{ marginBottom: '1.5rem' }}>
+      <h2 style={{ margin: '0 0 0.75rem', fontSize: '1rem', fontWeight: 700 }}>Evolution CA ({period}j)</h2>
+      <div style={{ overflowX: 'auto' }}>
+        <svg viewBox={`0 0 ${W} ${H + 20}`} style={{ width: '100%', maxWidth: W, display: 'block' }}>
+          {data.map((d, i) => {
+            const bh = d.revenue > 0 ? Math.max(2, Math.round((d.revenue / max) * H)) : 0;
+            const x = PAD + i * ((W - PAD * 2) / data.length);
+            const y = H - bh;
+            const showLabel = i % step === 0 || i === data.length - 1;
+            const label = d.date.slice(5); // MM-DD
+            return (
+              <g key={d.date}>
+                <rect x={x} y={y} width={barW} height={bh}
+                  fill={d.revenue > 0 ? '#3b82f6' : '#1e2535'} rx={1} opacity={0.85}>
+                  <title>{d.date}: {d.revenue.toFixed(2)} €</title>
+                </rect>
+                {showLabel && (
+                  <text x={x + barW / 2} y={H + 15} textAnchor="middle" fontSize={9} fill="#475569">{label}</text>
+                )}
+              </g>
+            );
+          })}
+          {/* Zero line */}
+          <line x1={PAD} y1={H} x2={W - PAD} y2={H} stroke="#2a3045" strokeWidth={1} />
+        </svg>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem' }}>
+        <span style={{ fontSize: '0.7rem', color: '#475569' }}>max: {max.toFixed(2)} €</span>
+        <span style={{ fontSize: '0.7rem', color: '#3b82f6' }}>Total: {data.reduce((s, d) => s + d.revenue, 0).toFixed(2)} €</span>
+      </div>
     </div>
   );
 }
@@ -67,6 +112,10 @@ export default function StatsPage() {
             <Card label="Vendus"      value={String(stats.totalSoldQty)}            sub={`${stats.totalReturnedQty} retours`} />
             <Card label="Stock"       value={String(stats.totalStock)} />
           </div>
+
+          {stats.dailyRevenue && stats.dailyRevenue.length > 0 && (
+            <RevenueChart data={stats.dailyRevenue} period={period} />
+          )}
 
           <div className="card">
             <h2 style={{ margin: '0 0 1rem', fontSize: '1rem', fontWeight: 700 }}>Top variantes ({period}j)</h2>

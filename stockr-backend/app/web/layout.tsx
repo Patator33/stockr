@@ -6,12 +6,13 @@ import { AuthContext, type AuthCtx } from './_auth';
 import { wFetch } from './_api';
 
 const NAV = [
-  { href: '/web/dashboard', label: 'Dashboard', icon: '🏠' },
-  { href: '/web/orders',   label: 'Commandes', icon: '📦' },
-  { href: '/web/sales',    label: 'Ventes',     icon: '💰' },
-  { href: '/web/stats',    label: 'Stats',      icon: '📊' },
-  { href: '/web/manage',   label: 'Gestion',    icon: '🗃️' },
-  { href: '/web/settings', label: 'Réglages',   icon: '⚙️' },
+  { href: '/web/dashboard',       label: 'Dashboard',    icon: '🏠' },
+  { href: '/web/orders',          label: 'Commandes',    icon: '📦' },
+  { href: '/web/sales',           label: 'Ventes',       icon: '💰' },
+  { href: '/web/stats',           label: 'Stats',        icon: '📊' },
+  { href: '/web/manage',          label: 'Gestion',      icon: '🗃️' },
+  { href: '/web/stock-movements', label: 'Mouvements',   icon: '🔄' },
+  { href: '/web/settings',        label: 'Réglages',     icon: '⚙️' },
 ];
 
 export default function WebLayout({ children }: { children: React.ReactNode }) {

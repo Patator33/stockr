@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try { await requireAuth(req); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
   const { id } = await params;
-  const { name, attributes, costPrice, salePrice, shippingCost, vatRate, barcode, supplierRef } = await req.json();
+  const { name, attributes, costPrice, salePrice, shippingCost, vatRate, barcode, supplierRef, lowStockThreshold } = await req.json();
   if (!name?.trim()) return NextResponse.json({ error: 'Nom requis' }, { status: 400 });
   const variant = await prisma.productVariant.update({
     where: { id },
@@ -18,6 +18,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       vatRate: vatRate !== undefined ? Number(vatRate) : undefined,
       barcode: barcode?.trim() || null,
       supplierRef: supplierRef?.trim() || null,
+      lowStockThreshold: lowStockThreshold !== undefined && lowStockThreshold !== '' ? Number(lowStockThreshold) : null,
     },
   });
   return NextResponse.json(variant);
