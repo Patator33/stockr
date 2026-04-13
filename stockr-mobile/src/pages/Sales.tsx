@@ -120,7 +120,7 @@ export default function Sales() {
       setNsVariants(variants);
       setNsStocks(stocks);
       setNsVariantId(variant.id);
-      setNsPrice(String(variant.salePrice));
+      setNsPrice(String(variant.activePromotion ? variant.activePromotion.price : variant.salePrice));
       // Pre-select default location
       const product = products.find(p => p.id === variant.product.id);
       if (product?.defaultLocationId) setNsLocationId(product.defaultLocationId);

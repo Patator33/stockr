@@ -8,8 +8,12 @@ export async function GET(req: NextRequest) {
   const barcode = req.nextUrl.searchParams.get('barcode');
   const supplierRef = req.nextUrl.searchParams.get('supplierRef');
   const now = new Date();
-  const withActivePromo = (v: { promotions: { id: string; price: number; startDate: Date; endDate: Date | null; variantId: string; createdAt: Date }[] }) => {
-    const active = v.promotions.find(p => p.startDate <= now && (!p.endDate || p.endDate >= now)) || null;
+  const withActivePromo = (v: { promotions: { id: string; price: number; startDate: Date | string; endDate: Date | string | null; variantId: string; createdAt: Date | string }[] }) => {
+    const active = v.promotions.find(p => {
+      const start = new Date(p.startDate);
+      const end = p.endDate ? new Date(p.endDate) : null;
+      return start <= now && (!end || end >= now);
+    }) || null;
     return { ...v, activePromotion: active };
   };
 
