@@ -98,7 +98,10 @@ export default function Sales() {
   const onNsVariantChange = (vid: string) => {
     setNsVariantId(vid);
     const variant = nsVariants.find(v => v.id === vid);
-    if (variant) setNsPrice(String(variant.salePrice));
+    if (variant) {
+      const price = variant.activePromotion ? variant.activePromotion.price : variant.salePrice;
+      setNsPrice(String(price));
+    }
   };
 
   const handleScanForSale = async () => {
@@ -141,6 +144,7 @@ export default function Sales() {
 
   const selectedLocationStock = availableLocations.find(l => l.location.id === nsLocationId)?.qty ?? 0;
   const selectedVariant = nsVariants.find(v => v.id === nsVariantId);
+  const activePromo = selectedVariant?.activePromotion ?? null;
 
   const handleNewSale = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -196,6 +200,13 @@ export default function Sales() {
     return eff * (s.unitSalePrice - s.unitCostPrice - s.unitShippingCost);
   };
 
+  const saleVat = (s: Sale) => {
+    const returned = s.returns?.reduce((sum, r) => sum + r.quantity, 0) ?? 0;
+    const eff = s.quantity - returned;
+    const vatRate = s.vatRate ?? 20;
+    return eff * s.unitSalePrice * vatRate / (100 + vatRate);
+  };
+
   return (
     <>
       <PullToRefresh onRefresh={load}>
@@ -237,6 +248,9 @@ export default function Sales() {
                   <div style={{ textAlign: 'right', marginLeft: '0.75rem' }}>
                     <p style={{ margin: 0, fontWeight: 700, fontSize: '1rem', color: '#22c55e' }}>
                       +{fmt(sale.quantity * sale.unitSalePrice)}
+                    </p>
+                    <p style={{ margin: '0.125rem 0 0', fontSize: '0.75rem', color: '#a78bfa' }}>
+                      TVA: {fmt(saleVat(sale))}
                     </p>
                     <p style={{ margin: '0.125rem 0 0', fontSize: '0.75rem', color: margin >= 0 ? '#22c55e' : '#ef4444' }}>
                       Marge: {fmt(margin)}
@@ -360,7 +374,7 @@ export default function Sales() {
                   </div>
                   <div>
                     <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">
-                      Prix de vente € {selectedVariant ? `(défaut: ${selectedVariant.salePrice.toFixed(2)} €)` : ''}
+                      Prix de vente €{activePromo ? <span style={{ color: '#f59e0b', marginLeft: '0.375rem' }}>🏷️ promo active</span> : selectedVariant ? ` (défaut: ${selectedVariant.salePrice.toFixed(2)} €)` : ''}
                     </label>
                     <input type="number" step="0.01" min="0" value={nsPrice} onChange={e => setNsPrice(e.target.value)} required />
                   </div>

@@ -46,12 +46,14 @@ model ProductVariant {
   costPrice    Float           @default(0)
   salePrice    Float           @default(0)
   shippingCost Float           @default(0)
+  vatRate      Float           @default(20)
   barcode      String?         @unique
   supplierRef  String?         @unique
   stocks       Stock[]
   sales        Sale[]
   transfers    StockTransfer[]
   orderItems   OrderItem[]
+  promotions   Promotion[]
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 }
@@ -104,9 +106,20 @@ model Sale {
   unitSalePrice    Float
   unitCostPrice    Float
   unitShippingCost Float
+  vatRate          Float           @default(20)
   notes            String?
   returns          Return[]
   createdAt        DateTime        @default(now())
+}
+
+model Promotion {
+  id        String         @id @default(uuid())
+  variantId String
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  price     Float
+  startDate DateTime
+  endDate   DateTime?
+  createdAt DateTime       @default(now())
 }
 
 model Return {

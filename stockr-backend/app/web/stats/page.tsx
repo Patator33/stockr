@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { wGet } from '../_api';
 
-interface Stats { period: number; totalRevenue: number; totalCost: number; totalShipping: number; grossMargin: number; netMargin: number; totalSoldQty: number; totalReturnedQty: number; totalStock: number; topVariants: { name: string; productName: string; sold: number; returned: number; revenue: number; margin: number }[]; }
+interface Stats { period: number; totalRevenue: number; totalCost: number; totalShipping: number; grossMargin: number; netMargin: number; totalVat: number; totalSoldQty: number; totalReturnedQty: number; totalStock: number; topVariants: { name: string; productName: string; sold: number; returned: number; revenue: number; margin: number }[]; }
 interface Product { id: string; name: string; }
 
 function Card({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
@@ -62,6 +62,8 @@ export default function StatsPage() {
               sub={stats.totalRevenue > 0 ? `${((stats.grossMargin / stats.totalRevenue) * 100).toFixed(1)}%` : undefined} />
             <Card label="Marge nette" value={`${stats.netMargin.toFixed(2)} €`}    color={stats.netMargin >= 0 ? '#22c55e' : '#ef4444'}
               sub={`Port: ${stats.totalShipping.toFixed(2)} €`} />
+            <Card label="TVA collectée" value={`${(stats.totalVat ?? 0).toFixed(2)} €`} color="#a78bfa"
+              sub={stats.totalRevenue > 0 ? `${(((stats.totalVat ?? 0) / stats.totalRevenue) * 100).toFixed(1)}%` : undefined} />
             <Card label="Vendus"      value={String(stats.totalSoldQty)}            sub={`${stats.totalReturnedQty} retours`} />
             <Card label="Stock"       value={String(stats.totalStock)} />
           </div>

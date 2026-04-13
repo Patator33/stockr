@@ -72,6 +72,7 @@ export default function Stats() {
               <StatCard label="Marge brute" value={fmt(stats.grossMargin)} color={stats.grossMargin >= 0 ? '#22c55e' : '#ef4444'} />
               <StatCard label="Marge nette" value={fmt(stats.netMargin)} color={stats.netMargin >= 0 ? '#22c55e' : '#ef4444'} />
               <StatCard label="% Marge nette" value={`${marginPct}%`} color={Number(marginPct) >= 0 ? '#2b8cee' : '#ef4444'} />
+              <StatCard label="TVA collectée" value={fmt(stats.totalVat ?? 0)} color="#a78bfa" />
               <StatCard label="Unités vendues" value={String(stats.totalSoldQty)} color="#e2e8f0" />
               <StatCard label="Retours" value={String(stats.totalReturnedQty)} color={stats.totalReturnedQty > 0 ? '#f59e0b' : '#e2e8f0'} />
               <StatCard label="Stock total" value={String(stats.totalStock)} color="#2b8cee" />

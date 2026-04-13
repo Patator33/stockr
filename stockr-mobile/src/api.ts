@@ -111,6 +111,11 @@ export const api = {
     update: (id: string, data: Omit<VariantInput, 'productId'> & { barcode?: string | null; supplierRef?: string | null }) => put<Variant>(`/api/variants/${id}`, data),
     delete: (id: string) => del(`/api/variants/${id}`),
   },
+  promotions: {
+    list: (variantId: string) => get<Promotion[]>(`/api/promotions?variantId=${variantId}`),
+    create: (data: { variantId: string; price: number; startDate: string; endDate?: string | null }) => post<Promotion>('/api/promotions', data),
+    delete: (id: string) => del(`/api/promotions/${id}`),
+  },
   locations: {
     list: () => get<Location[]>('/api/locations'),
     create: (data: { name: string; description?: string }) => post<Location>('/api/locations', data),
@@ -184,6 +189,15 @@ export interface Attribute {
   value: string;
 }
 
+export interface Promotion {
+  id: string;
+  variantId: string;
+  price: number;
+  startDate: string;
+  endDate?: string | null;
+  createdAt: string;
+}
+
 export interface Variant {
   id: string;
   productId: string;
@@ -192,9 +206,11 @@ export interface Variant {
   costPrice: number;
   salePrice: number;
   shippingCost: number;
+  vatRate: number;
   barcode?: string | null;
   supplierRef?: string | null;
   stocks?: StockEntry[];
+  activePromotion?: Promotion | null;
   createdAt: string;
 }
 
@@ -259,6 +275,7 @@ export interface Sale {
   unitSalePrice: number;
   unitCostPrice: number;
   unitShippingCost: number;
+  vatRate: number;
   notes?: string;
   createdAt: string;
   variant?: { name: string; product: { id: string; name: string } };
@@ -299,6 +316,7 @@ export interface Stats {
   totalShipping: number;
   grossMargin: number;
   netMargin: number;
+  totalVat: number;
   totalSoldQty: number;
   totalReturnedQty: number;
   totalStock: number;

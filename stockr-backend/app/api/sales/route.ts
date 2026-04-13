@@ -71,6 +71,7 @@ export async function POST(req: NextRequest) {
         unitSalePrice: Number(unitSalePrice ?? variant.salePrice),
         unitCostPrice: Number(unitCostPrice ?? variant.costPrice),
         unitShippingCost: Number(unitShippingCost ?? variant.shippingCost),
+        vatRate: variant.vatRate,
         notes: notes?.trim() || null,
       },
     }),

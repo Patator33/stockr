@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
   let totalShipping = 0;
   let totalReturnedQty = 0;
   let totalSoldQty = 0;
+  let totalVat = 0;
   const variantStats: Record<string, { name: string; productName: string; sold: number; returned: number; revenue: number; margin: number }> = {};
 
   for (const sale of sales) {
@@ -37,12 +38,15 @@ export async function GET(req: NextRequest) {
     const cost = effectiveQty * sale.unitCostPrice;
     const shipping = effectiveQty * sale.unitShippingCost;
     const netMargin = revenue - cost - shipping;
+    const vatRate = (sale as { vatRate?: number }).vatRate ?? 20;
+    const vat = revenue * vatRate / (100 + vatRate);
 
     totalRevenue += revenue;
     totalCost += cost;
     totalShipping += shipping;
     totalReturnedQty += returnedQty;
     totalSoldQty += sale.quantity;
+    totalVat += vat;
 
     const vId = sale.variantId;
     if (!variantStats[vId]) {
@@ -82,6 +86,7 @@ export async function GET(req: NextRequest) {
     totalShipping: Math.round(totalShipping * 100) / 100,
     grossMargin: Math.round(grossMargin * 100) / 100,
     netMargin: Math.round(netMargin * 100) / 100,
+    totalVat: Math.round(totalVat * 100) / 100,
     totalSoldQty,
     totalReturnedQty,
     totalStock,

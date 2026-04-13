@@ -2,8 +2,8 @@
 import { useEffect, useState } from 'react';
 import { wGet, wFetch } from '../_api';
 
-interface Sale { id: string; variantId: string; locationId: string; quantity: number; unitSalePrice: number; unitCostPrice: number; unitShippingCost: number; notes?: string | null; createdAt: string; variant?: { name: string; product: { name: string } }; location?: { name: string }; returns?: { id: string; quantity: number; reason?: string | null }[]; }
-interface Variant { id: string; name: string; salePrice: number; costPrice: number; shippingCost: number; }
+interface Sale { id: string; variantId: string; locationId: string; quantity: number; unitSalePrice: number; unitCostPrice: number; unitShippingCost: number; vatRate: number; notes?: string | null; createdAt: string; variant?: { name: string; product: { name: string } }; location?: { name: string }; returns?: { id: string; quantity: number; reason?: string | null }[]; }
+interface Variant { id: string; name: string; salePrice: number; costPrice: number; shippingCost: number; vatRate: number; activePromotion?: { price: number; startDate: string; endDate?: string | null } | null; }
 interface Location { id: string; name: string; isDefault?: boolean; }
 interface SalesPage { sales: Sale[]; total: number; pages: number; }
 
@@ -34,7 +34,8 @@ export default function SalesPage() {
 
   const handleVariantChange = (variantId: string) => {
     const v = variants.find(x => x.id === variantId);
-    setForm(f => ({ ...f, variantId, unitSalePrice: v?.salePrice || 0, unitCostPrice: v?.costPrice || 0, unitShippingCost: v?.shippingCost || 0 }));
+    const price = v?.activePromotion ? v.activePromotion.price : (v?.salePrice || 0);
+    setForm(f => ({ ...f, variantId, unitSalePrice: price, unitCostPrice: v?.costPrice || 0, unitShippingCost: v?.shippingCost || 0 }));
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -88,8 +89,13 @@ export default function SalesPage() {
               <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Variante</label>
               <select value={form.variantId} onChange={e => handleVariantChange(e.target.value)} required>
                 <option value="">— Sélectionner —</option>
-                {variants.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                {variants.map(v => <option key={v.id} value={v.id}>{v.name}{v.activePromotion ? ` 🏷️ ${v.activePromotion.price.toFixed(2)} €` : ''}</option>)}
               </select>
+              {form.variantId && variants.find(v => v.id === form.variantId)?.activePromotion && (
+                <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#f59e0b' }}>
+                  🏷️ Promotion active — prix : {variants.find(v => v.id === form.variantId)!.activePromotion!.price.toFixed(2)} €
+                </p>
+              )}
             </div>
             <div>
               <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Zone</label>
@@ -132,12 +138,14 @@ export default function SalesPage() {
           <>
             <p style={{ margin: '0 0 0.75rem', fontSize: '0.875rem', color: '#64748b' }}>{data.total} vente{data.total !== 1 ? 's' : ''}</p>
             <table>
-              <thead><tr><th>Date</th><th>Produit</th><th>Zone</th><th>Qté</th><th>CA</th><th>Marge</th><th>Notes</th><th></th></tr></thead>
+              <thead><tr><th>Date</th><th>Produit</th><th>Zone</th><th>Qté</th><th>CA</th><th>TVA</th><th>Marge</th><th>Notes</th><th></th></tr></thead>
               <tbody>
                 {data.sales.flatMap(s => {
                   const ret = s.returns?.reduce((sum, r) => sum + r.quantity, 0) || 0;
                   const net = s.quantity - ret;
                   const revenue = net * s.unitSalePrice;
+                  const vatRate = s.vatRate ?? 20;
+                  const vat = revenue * vatRate / (100 + vatRate);
                   const margin  = revenue - net * s.unitCostPrice - net * s.unitShippingCost;
                   return [
                     <tr key={s.id}>
@@ -146,6 +154,7 @@ export default function SalesPage() {
                       <td style={{ fontSize: '0.75rem' }}>{s.location?.name || '—'}</td>
                       <td>{s.quantity}{ret > 0 && <span style={{ color: '#ef4444', fontSize: '0.75rem' }}> -{ret}</span>}</td>
                       <td style={{ color: '#3b82f6' }}>{revenue.toFixed(2)} €</td>
+                      <td style={{ color: '#a78bfa', fontSize: '0.8125rem' }}>{vat.toFixed(2)} €</td>
                       <td style={{ color: margin >= 0 ? '#22c55e' : '#ef4444' }}>{margin.toFixed(2)} €</td>
                       <td style={{ fontSize: '0.75rem', color: '#64748b' }}>{s.notes || '—'}</td>
                       <td>

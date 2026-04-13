@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import { wGet, wFetch } from '../_api';
 
 interface Product  { id: string; name: string; description?: string | null; defaultLocationId?: string | null; _count?: { variants: number }; }
-interface Variant  { id: string; name: string; attributes: string; costPrice: number; salePrice: number; shippingCost: number; barcode?: string | null; supplierRef?: string | null; stocks?: { quantity: number; location: { name: string } }[]; }
+interface Variant  { id: string; name: string; attributes: string; costPrice: number; salePrice: number; shippingCost: number; vatRate: number; barcode?: string | null; supplierRef?: string | null; stocks?: { quantity: number; location: { name: string } }[]; activePromotion?: Promotion | null; }
+interface Promotion { id: string; variantId: string; price: number; startDate: string; endDate?: string | null; }
 interface Attr     { key: string; value: string; }
 interface Location { id: string; name: string; description?: string | null; isDefault?: boolean; }
 interface StockItem { variantId: string; variantName: string; productName: string; quantity: number; }
@@ -42,8 +43,8 @@ export default function ManagePage() {
 }
 
 /* ─── Variant form (shared by create + edit) ─── */
-interface VFormData { name: string; costPrice: number; salePrice: number; shippingCost: number; barcode: string; supplierRef: string; attrs: Attr[]; }
-const emptyVForm = (): VFormData => ({ name:'', costPrice:0, salePrice:0, shippingCost:0, barcode:'', supplierRef:'', attrs:[{ key:'', value:'' }] });
+interface VFormData { name: string; costPrice: number; salePrice: number; shippingCost: number; vatRate: number; barcode: string; supplierRef: string; attrs: Attr[]; }
+const emptyVForm = (): VFormData => ({ name:'', costPrice:0, salePrice:0, shippingCost:0, vatRate:20, barcode:'', supplierRef:'', attrs:[{ key:'', value:'' }] });
 
 function VariantForm({
   title, initial, attrKeys, onSubmit, onCancel, error, loading,
@@ -106,6 +107,7 @@ function VariantForm({
       <div><label style={{ fontSize:'0.7rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Prix achat €</label><input type="number" step="0.01" value={f.costPrice} onChange={e => setF(p=>({...p,costPrice:Number(e.target.value)}))} /></div>
       <div><label style={{ fontSize:'0.7rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Prix vente €</label><input type="number" step="0.01" value={f.salePrice} onChange={e => setF(p=>({...p,salePrice:Number(e.target.value)}))} /></div>
       <div><label style={{ fontSize:'0.7rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Frais port €</label><input type="number" step="0.01" value={f.shippingCost} onChange={e => setF(p=>({...p,shippingCost:Number(e.target.value)}))} /></div>
+      <div><label style={{ fontSize:'0.7rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>TVA %</label><input type="number" step="0.1" min="0" max="100" value={f.vatRate} onChange={e => setF(p=>({...p,vatRate:Number(e.target.value)}))} /></div>
       <div><label style={{ fontSize:'0.7rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Code barre</label><input value={f.barcode} onChange={e => setF(p=>({...p,barcode:e.target.value}))} /></div>
       <div><label style={{ fontSize:'0.7rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Réf. fournisseur</label><input value={f.supplierRef} onChange={e => setF(p=>({...p,supplierRef:e.target.value}))} /></div>
 
@@ -132,6 +134,42 @@ function ProductsTab() {
   const [editV,     setEditV]     = useState<Variant | null>(null);
   const [vError,    setVError]    = useState('');
   const [vLoading,  setVLoading]  = useState(false);
+
+  // Promotions
+  const [promoV,    setPromoV]    = useState<string | null>(null); // variantId showing promo panel
+  const [promos,    setPromos]    = useState<Record<string, Promotion[]>>({});
+  const [promoForm, setPromoForm] = useState({ price:'', startDate: new Date().toISOString().slice(0,10), endDate:'' });
+  const [promoErr,  setPromoErr]  = useState('');
+
+  const loadPromos = (variantId: string) =>
+    wGet<Promotion[]>(`/api/promotions?variantId=${variantId}`)
+      .then(p => setPromos(prev => ({ ...prev, [variantId]: p })))
+      .catch(()=>{});
+
+  const openPromos = (variantId: string) => {
+    if (promoV === variantId) { setPromoV(null); return; }
+    setPromoV(variantId);
+    setPromoErr('');
+    setPromoForm({ price:'', startDate: new Date().toISOString().slice(0,10), endDate:'' });
+    loadPromos(variantId);
+  };
+
+  const createPromo = async (variantId: string) => {
+    setPromoErr('');
+    if (!promoForm.price) { setPromoErr('Prix requis'); return; }
+    const body = { variantId, price: Number(promoForm.price), startDate: promoForm.startDate, endDate: promoForm.endDate || null };
+    const res = await wFetch('/api/promotions', { method:'POST', body:JSON.stringify(body) });
+    if (!res.ok) { const d=await res.json(); setPromoErr(d.error||'Erreur'); return; }
+    setPromoForm({ price:'', startDate: new Date().toISOString().slice(0,10), endDate:'' });
+    loadPromos(variantId);
+    if (selected) loadVariants(selected.id);
+  };
+
+  const deletePromo = async (promoId: string, variantId: string) => {
+    await wFetch(`/api/promotions/${promoId}`, { method:'DELETE' });
+    loadPromos(variantId);
+    if (selected) loadVariants(selected.id);
+  };
 
   const loadProducts = () => wGet<Product[]>('/api/products').then(setProducts).catch(()=>{});
   const loadVariants = (pid: string) => wGet<Variant[]>(`/api/variants?productId=${pid}`).then(setVariants).catch(()=>{});
@@ -167,7 +205,7 @@ function ProductsTab() {
     setVError(''); setVLoading(true);
     const res = await wFetch('/api/variants', { method:'POST', body:JSON.stringify({
       productId:selected.id, name:f.name, attributes:f.attrs.filter(a=>a.key&&a.value),
-      costPrice:f.costPrice, salePrice:f.salePrice, shippingCost:f.shippingCost,
+      costPrice:f.costPrice, salePrice:f.salePrice, shippingCost:f.shippingCost, vatRate:f.vatRate,
       barcode:f.barcode||null, supplierRef:f.supplierRef||null,
     })});
     const d = await res.json();
@@ -181,7 +219,7 @@ function ProductsTab() {
     setVError(''); setVLoading(true);
     const res = await wFetch(`/api/variants/${editV.id}`, { method:'PUT', body:JSON.stringify({
       name:f.name, attributes:f.attrs.filter(a=>a.key&&a.value),
-      costPrice:f.costPrice, salePrice:f.salePrice, shippingCost:f.shippingCost,
+      costPrice:f.costPrice, salePrice:f.salePrice, shippingCost:f.shippingCost, vatRate:f.vatRate,
       barcode:f.barcode||null, supplierRef:f.supplierRef||null,
     })});
     const d = await res.json();
@@ -276,7 +314,7 @@ function ProductsTab() {
           )}
 
           <table>
-            <thead><tr><th>Nom</th><th>Attributs</th><th>Achat</th><th>Vente</th><th>Code barre</th><th>Stock</th><th></th></tr></thead>
+            <thead><tr><th>Nom</th><th>Attributs</th><th>Achat</th><th>Vente</th><th>TVA</th><th>Code barre</th><th>Stock</th><th></th></tr></thead>
             <tbody>
               {variants.map(v => {
                 const attrs = parseAttrs(v.attributes);
@@ -284,28 +322,62 @@ function ProductsTab() {
                 return (
                   <>
                     <tr key={v.id}>
-                      <td style={{ fontWeight:600 }}>{v.name}</td>
+                      <td style={{ fontWeight:600 }}>{v.name}{v.activePromotion && <span style={{ marginLeft:'0.375rem', fontSize:'0.7rem', color:'#f59e0b', background:'rgba(245,158,11,0.1)', border:'1px solid rgba(245,158,11,0.3)', borderRadius:'0.25rem', padding:'0.1rem 0.3rem' }}>🏷️ {v.activePromotion.price.toFixed(2)} €</span>}</td>
                       <td style={{ fontSize:'0.75rem', color:'#94a3b8' }}>{attrs.map(a=>`${a.key}: ${a.value}`).join(' · ')||'—'}</td>
                       <td style={{ fontSize:'0.8125rem' }}>{v.costPrice.toFixed(2)} €</td>
                       <td style={{ fontSize:'0.8125rem', color:'#3b82f6' }}>{v.salePrice.toFixed(2)} €</td>
+                      <td style={{ fontSize:'0.75rem', color:'#64748b' }}>{(v.vatRate??20).toFixed(0)} %</td>
                       <td style={{ fontSize:'0.75rem', color:'#64748b' }}>{v.barcode||'—'}</td>
                       <td style={{ fontWeight:700, color:totalStock>0?'#22c55e':totalStock<0?'#ef4444':'#64748b' }}>{totalStock}</td>
                       <td>
                         <div style={{ display:'flex', gap:'0.25rem' }}>
-                          <button onClick={() => { setEditV(v); setShowNewV(false); setVError(''); }}
+                          <button onClick={() => openPromos(v.id)}
+                            style={{ background:'none', border:`1px solid ${promoV===v.id?'rgba(245,158,11,0.5)':'#2a3045'}`, borderRadius:'0.375rem', color:promoV===v.id?'#f59e0b':'#94a3b8', fontSize:'0.7rem', padding:'0.2rem 0.4rem' }}>🏷️</button>
+                          <button onClick={() => { setEditV(v); setShowNewV(false); setVError(''); setPromoV(null); }}
                             style={{ background:'none', border:'1px solid #2a3045', borderRadius:'0.375rem', color:'#94a3b8', fontSize:'0.7rem', padding:'0.2rem 0.4rem' }}>✏️</button>
                           <button onClick={() => deleteVariant(v.id)}
                             style={{ background:'none', border:'1px solid #7f1d1d', borderRadius:'0.375rem', color:'#ef4444', fontSize:'0.7rem', padding:'0.2rem 0.4rem' }}>✕</button>
                         </div>
                       </td>
                     </tr>
+                    {promoV === v.id && (
+                      <tr key={`promo-${v.id}`}>
+                        <td colSpan={8} style={{ background:'#0a0e1a', padding:'0.75rem' }}>
+                          <p style={{ margin:'0 0 0.5rem', fontSize:'0.8125rem', fontWeight:700, color:'#f59e0b' }}>🏷️ Promotions — {v.name}</p>
+                          {/* Existing promos */}
+                          <div style={{ display:'flex', flexWrap:'wrap', gap:'0.375rem', marginBottom:'0.75rem' }}>
+                            {(promos[v.id]||[]).length === 0 && <span style={{ fontSize:'0.75rem', color:'#475569' }}>Aucune promotion</span>}
+                            {(promos[v.id]||[]).map(p => {
+                              const now = new Date();
+                              const start = new Date(p.startDate);
+                              const end = p.endDate ? new Date(p.endDate) : null;
+                              const active = start <= now && (!end || end >= now);
+                              return (
+                                <span key={p.id} style={{ display:'inline-flex', alignItems:'center', gap:'0.375rem', fontSize:'0.75rem', background: active?'rgba(245,158,11,0.08)':'rgba(100,116,139,0.08)', border:`1px solid ${active?'rgba(245,158,11,0.3)':'#2a3045'}`, borderRadius:'0.375rem', padding:'0.25rem 0.5rem', color: active?'#f59e0b':'#64748b' }}>
+                                  {active && '✓ '}{p.price.toFixed(2)} € · {new Date(p.startDate).toLocaleDateString('fr-FR')} → {p.endDate ? new Date(p.endDate).toLocaleDateString('fr-FR') : '∞'}
+                                  <button onClick={() => deletePromo(p.id, v.id)} style={{ background:'none', border:'none', color:'#ef4444', cursor:'pointer', padding:0, fontSize:'0.75rem' }}>✕</button>
+                                </span>
+                              );
+                            })}
+                          </div>
+                          {/* New promo form */}
+                          <div style={{ display:'flex', gap:'0.5rem', alignItems:'flex-end', flexWrap:'wrap' }}>
+                            <div><label style={{ fontSize:'0.7rem', color:'#64748b', display:'block', marginBottom:'0.2rem' }}>Prix promo €</label><input type="number" step="0.01" value={promoForm.price} onChange={e=>setPromoForm(p=>({...p,price:e.target.value}))} style={{ width:'7rem' }} /></div>
+                            <div><label style={{ fontSize:'0.7rem', color:'#64748b', display:'block', marginBottom:'0.2rem' }}>Début</label><input type="date" value={promoForm.startDate} onChange={e=>setPromoForm(p=>({...p,startDate:e.target.value}))} style={{ width:'9rem' }} /></div>
+                            <div><label style={{ fontSize:'0.7rem', color:'#64748b', display:'block', marginBottom:'0.2rem' }}>Fin (optionnel)</label><input type="date" value={promoForm.endDate} onChange={e=>setPromoForm(p=>({...p,endDate:e.target.value}))} style={{ width:'9rem' }} /></div>
+                            <button onClick={() => createPromo(v.id)} className="btn-primary" style={{ fontSize:'0.75rem', padding:'0.375rem 0.75rem' }}>+ Créer</button>
+                          </div>
+                          {promoErr && <p style={{ margin:'0.25rem 0 0', color:'#ef4444', fontSize:'0.75rem' }}>{promoErr}</p>}
+                        </td>
+                      </tr>
+                    )}
                     {editV?.id === v.id && (
                       <tr key={`edit-${v.id}`}>
                         <td colSpan={7} style={{ padding:'0.5rem 0', background:'transparent' }}>
                           <VariantForm
                             title={`Modifier — ${v.name}`}
                             initial={{
-                              name:v.name, costPrice:v.costPrice, salePrice:v.salePrice, shippingCost:v.shippingCost,
+                              name:v.name, costPrice:v.costPrice, salePrice:v.salePrice, shippingCost:v.shippingCost, vatRate:v.vatRate??20,
                               barcode:v.barcode||'', supplierRef:v.supplierRef||'',
                               attrs:attrs.length>0?attrs:[{key:'',value:''}],
                             }}

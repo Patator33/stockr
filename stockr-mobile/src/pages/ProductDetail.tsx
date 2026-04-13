@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api, type ProductDetail, type Attribute, type Location } from '../api';
+import { api, type ProductDetail, type Attribute, type Location, type Promotion } from '../api';
 import PullToRefresh from '../components/PullToRefresh';
 import ConfirmModal from '../components/ConfirmModal';
 import { scanBarcode } from '../components/BarcodeScanner';
@@ -23,6 +23,45 @@ export default function ProductDetailPage() {
   const [savingDefault, setSavingDefault] = useState(false);
   const [scanningVariantId, setScanningVariantId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState('');
+
+  // Promotions panel
+  const [promoVariantId, setPromoVariantId] = useState<string | null>(null);
+  const [promos, setPromos] = useState<Promotion[]>([]);
+  const [promoPrice, setPromoPrice] = useState('');
+  const [promoStart, setPromoStart] = useState(new Date().toISOString().slice(0,10));
+  const [promoEnd, setPromoEnd] = useState('');
+  const [promoErr, setPromoErr] = useState('');
+
+  const openPromos = async (variantId: string) => {
+    if (promoVariantId === variantId) { setPromoVariantId(null); return; }
+    setPromoVariantId(variantId);
+    setPromoErr('');
+    setPromoPrice('');
+    setPromoStart(new Date().toISOString().slice(0,10));
+    setPromoEnd('');
+    const list = await api.promotions.list(variantId);
+    setPromos(list);
+  };
+
+  const handleCreatePromo = async () => {
+    if (!promoVariantId || !promoPrice) { setPromoErr('Prix requis'); return; }
+    setPromoErr('');
+    try {
+      await api.promotions.create({ variantId: promoVariantId, price: Number(promoPrice), startDate: promoStart, endDate: promoEnd || null });
+      const list = await api.promotions.list(promoVariantId);
+      setPromos(list);
+      setPromoPrice('');
+      await load();
+    } catch (e) { setPromoErr(e instanceof Error ? e.message : 'Erreur'); }
+  };
+
+  const handleDeletePromo = async (promoId: string) => {
+    if (!promoVariantId) return;
+    await api.promotions.delete(promoId);
+    const list = await api.promotions.list(promoVariantId);
+    setPromos(list);
+    await load();
+  };
 
   // New variant modal
   const [showNewVariant, setShowNewVariant] = useState(false);
@@ -297,10 +336,50 @@ export default function ProductDetailPage() {
                     {scanningVariantId === v.id ? '…' : '📷 Scanner'}
                   </button>
                 </div>
-                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                  <button
+                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem', background: promoVariantId === v.id ? 'rgba(245,158,11,0.12)' : 'none', color: promoVariantId === v.id ? '#f59e0b' : '#94a3b8', border: `1px solid ${promoVariantId === v.id ? 'rgba(245,158,11,0.4)' : '#2a3045'}`, borderRadius: '0.375rem', cursor: 'pointer' }}
+                    onClick={() => openPromos(v.id)}
+                  >🏷️ Promos</button>
                   <button className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }} onClick={() => openEditVariant(v)}>✏️ Modifier</button>
                   <button className="btn-danger" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }} onClick={() => setDeleteVariant(v.id)}>Supprimer</button>
                 </div>
+                {promoVariantId === v.id && (
+                  <div style={{ marginTop: '0.75rem', background: '#0f1218', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '0.5rem', padding: '0.75rem' }}>
+                    <p style={{ margin: '0 0 0.5rem', fontSize: '0.8125rem', fontWeight: 700, color: '#f59e0b' }}>🏷️ Promotions</p>
+                    {promos.length === 0 && <p style={{ fontSize: '0.75rem', color: '#475569', margin: '0 0 0.5rem' }}>Aucune promotion</p>}
+                    {promos.map(p => {
+                      const now = new Date();
+                      const active = new Date(p.startDate) <= now && (!p.endDate || new Date(p.endDate) >= now);
+                      return (
+                        <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.375rem', background: active ? 'rgba(245,158,11,0.06)' : 'none', border: `1px solid ${active ? 'rgba(245,158,11,0.25)' : '#2a3045'}`, borderRadius: '0.375rem', padding: '0.25rem 0.5rem' }}>
+                          <span style={{ fontSize: '0.75rem', color: active ? '#f59e0b' : '#64748b' }}>
+                            {active && '✓ '}{p.price.toFixed(2)} € · {new Date(p.startDate).toLocaleDateString('fr-FR')} → {p.endDate ? new Date(p.endDate).toLocaleDateString('fr-FR') : '∞'}
+                          </span>
+                          <button onClick={() => handleDeletePromo(p.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.875rem', padding: '0 0.25rem' }}>✕</button>
+                        </div>
+                      );
+                    })}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', marginTop: '0.5rem' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.375rem' }}>
+                        <div>
+                          <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.2rem' }}>Prix promo €</label>
+                          <input type="number" step="0.01" value={promoPrice} onChange={e => setPromoPrice(e.target.value)} placeholder="0.00" style={{ fontSize: '0.8125rem', padding: '0.25rem 0.5rem' }} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.2rem' }}>Début</label>
+                          <input type="date" value={promoStart} onChange={e => setPromoStart(e.target.value)} style={{ fontSize: '0.8125rem', padding: '0.25rem 0.5rem' }} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block', marginBottom: '0.2rem' }}>Fin (opt.)</label>
+                          <input type="date" value={promoEnd} onChange={e => setPromoEnd(e.target.value)} style={{ fontSize: '0.8125rem', padding: '0.25rem 0.5rem' }} />
+                        </div>
+                      </div>
+                      {promoErr && <p style={{ margin: 0, color: '#ef4444', fontSize: '0.75rem' }}>{promoErr}</p>}
+                      <button className="btn-primary" style={{ fontSize: '0.8125rem', padding: '0.375rem 0.75rem', alignSelf: 'flex-start' }} onClick={handleCreatePromo}>+ Ajouter</button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
