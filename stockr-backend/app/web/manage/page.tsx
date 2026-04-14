@@ -10,7 +10,7 @@ interface Location { id: string; name: string; description?: string | null; isDe
 interface StockItem { variantId: string; variantName: string; productName: string; quantity: number; }
 interface StockByLoc { location: Location; items: StockItem[]; }
 interface Supplier { id: string; name: string; description?: string | null; createdAt: string; }
-interface SupplierPrice { id: string; variantId: string; supplierId: string; salePrice: number; costPrice: number; shippingCost: number; vatRate: number; supplier: Supplier; }
+interface SupplierPrice { id: string; variantId: string; supplierId: string; supplierRef?: string | null; salePrice: number; costPrice: number; shippingCost: number; vatRate: number; supplier: Supplier; }
 
 type Tab = 'products' | 'stock' | 'locations' | 'returns' | 'suppliers';
 
@@ -128,6 +128,7 @@ function VariantForm({
 function ProductsTab() {
   const [products,  setProducts]  = useState<Product[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [allSuppliers, setAllSuppliers] = useState<Supplier[]>([]);
   const [selected,  setSelected]  = useState<Product | null>(null);
   const [variants,  setVariants]  = useState<Variant[]>([]);
   const [showNewP,  setShowNewP]  = useState(false);
@@ -138,6 +139,9 @@ function ProductsTab() {
   const [editV,     setEditV]     = useState<Variant | null>(null);
   const [vError,    setVError]    = useState('');
   const [vLoading,  setVLoading]  = useState(false);
+  // Supplier refs for the variant being edited
+  const [supplierRefInputs, setSupplierRefInputs] = useState<Record<string, string>>({}); // supplierId → ref value
+  const [supplierRefMsg,    setSupplierRefMsg]    = useState('');
 
   // Promotions (per variant)
   const [promoV,    setPromoV]    = useState<string | null>(null); // variantId showing promo panel
@@ -200,6 +204,7 @@ function ProductsTab() {
   useEffect(() => {
     loadProducts();
     wGet<Location[]>('/api/locations').then(setLocations).catch(()=>{});
+    wGet<Supplier[]>('/api/suppliers').then(setAllSuppliers).catch(()=>{});
   }, []);
 
   const selectProduct = (p: Product) => { setSelected(p); setEditP(null); setShowNewV(false); setEditV(null); loadVariants(p.id); };
@@ -354,6 +359,57 @@ function ProductsTab() {
             />
           )}
 
+          {editV && (
+            <>
+              <VariantForm
+                title={`Modifier — ${editV.name}`}
+                initial={{
+                  name: editV.name,
+                  costPrice: editV.costPrice,
+                  salePrice: editV.salePrice,
+                  shippingCost: editV.shippingCost,
+                  vatRate: editV.vatRate,
+                  barcode: editV.barcode || '',
+                  supplierRef: editV.supplierRef || '',
+                  lowStockThreshold: editV.lowStockThreshold != null ? String(editV.lowStockThreshold) : '',
+                  attrs: parseAttrs(editV.attributes).length > 0 ? parseAttrs(editV.attributes) : [{ key:'', value:'' }],
+                }}
+                attrKeys={attrKeys}
+                onSubmit={updateVariant}
+                onCancel={() => { setEditV(null); setVError(''); }}
+                error={vError}
+                loading={vLoading}
+              />
+              {allSuppliers.length > 0 && (
+                <div style={{ background:'#0f1629', borderRadius:'0.5rem', padding:'0.75rem', marginBottom:'1rem' }}>
+                  <p style={{ margin:'0 0 0.5rem', fontWeight:700, fontSize:'0.8125rem', color:'#94a3b8' }}>Références fournisseurs</p>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'0.375rem' }}>
+                    {allSuppliers.map(s => (
+                      <div key={s.id} style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+                        <span style={{ width:'8rem', fontSize:'0.8125rem', color:'#64748b', flexShrink:0 }}>{s.name}</span>
+                        <input
+                          value={supplierRefInputs[s.id] ?? ''}
+                          onChange={e => setSupplierRefInputs(prev => ({ ...prev, [s.id]: e.target.value }))}
+                          placeholder="SKU, ASIN, ref…"
+                          style={{ flex:1 }}
+                        />
+                        <button
+                          onClick={async () => {
+                            setSupplierRefMsg('');
+                            await wFetch('/api/supplier-prices', { method:'POST', body:JSON.stringify({ variantId:editV.id, supplierId:s.id, supplierRef:supplierRefInputs[s.id]||null }) });
+                            setSupplierRefMsg('✓ Ref sauvegardée');
+                            if (selected) loadVariants(selected.id);
+                          }}
+                          className="btn-ghost" style={{ fontSize:'0.75rem', padding:'0.2rem 0.6rem', whiteSpace:'nowrap' }}>✓</button>
+                      </div>
+                    ))}
+                  </div>
+                  {supplierRefMsg && <p style={{ margin:'0.375rem 0 0', fontSize:'0.75rem', color: supplierRefMsg.startsWith('✓')?'#22c55e':'#ef4444' }}>{supplierRefMsg}</p>}
+                </div>
+              )}
+            </>
+          )}
+
           <table>
             <thead><tr><th>Nom</th><th>Attributs</th><th>Achat</th><th>Vente</th><th>TVA</th><th>Code barre</th><th>Stock</th><th></th></tr></thead>
             <tbody>
@@ -376,7 +432,13 @@ function ProductsTab() {
                         <div style={{ display:'flex', gap:'0.25rem' }}>
                           <button onClick={() => openPromos(v.id)}
                             style={{ background:'none', border:`1px solid ${promoV===v.id?'rgba(245,158,11,0.5)':'#2a3045'}`, borderRadius:'0.375rem', color:promoV===v.id?'#f59e0b':'#94a3b8', fontSize:'0.7rem', padding:'0.2rem 0.4rem' }}>🏷️</button>
-                          <button onClick={() => { setEditV(v); setShowNewV(false); setVError(''); setPromoV(null); }}
+                          <button onClick={() => {
+                              setEditV(v); setShowNewV(false); setVError(''); setPromoV(null); setSupplierRefMsg('');
+                              // Pre-populate supplier ref inputs from existing supplierPrices
+                              const refs: Record<string, string> = {};
+                              (v.supplierPrices || []).forEach(sp => { refs[sp.supplierId] = sp.supplierRef ?? ''; });
+                              setSupplierRefInputs(refs);
+                            }}
                             style={{ background:'none', border:'1px solid #2a3045', borderRadius:'0.375rem', color:'#94a3b8', fontSize:'0.7rem', padding:'0.2rem 0.4rem' }}>✏️</button>
                           <button onClick={() => deleteVariant(v.id)}
                             style={{ background:'none', border:'1px solid #7f1d1d', borderRadius:'0.375rem', color:'#ef4444', fontSize:'0.7rem', padding:'0.2rem 0.4rem' }}>✕</button>
@@ -684,7 +746,7 @@ function SuppliersTab() {
   const [selected, setSelected] = useState<Supplier | null>(null);
   const [variants, setVariants] = useState<{ id: string; name: string; productName: string; costPrice: number; salePrice: number; shippingCost: number; vatRate: number }[]>([]);
   const [prices, setPrices] = useState<Record<string, SupplierPrice>>({});  // keyed by variantId
-  const [priceInputs, setPriceInputs] = useState<Record<string, { salePrice: string; costPrice: string; shippingCost: string; vatRate: string }>>({});
+  const [priceInputs, setPriceInputs] = useState<Record<string, { salePrice: string; costPrice: string; shippingCost: string; vatRate: string; supplierRef: string }>>({});
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
@@ -708,7 +770,7 @@ function SuppliersTab() {
     const byVariant: Record<string, SupplierPrice> = {};
     existingPrices.forEach(p => { byVariant[p.variantId] = p; });
     setPrices(byVariant);
-    const inputs: Record<string, { salePrice: string; costPrice: string; shippingCost: string; vatRate: string }> = {};
+    const inputs: Record<string, { salePrice: string; costPrice: string; shippingCost: string; vatRate: string; supplierRef: string }> = {};
     flat.forEach(v => {
       const p = byVariant[v.id];
       inputs[v.id] = {
@@ -716,6 +778,7 @@ function SuppliersTab() {
         costPrice: String(p ? p.costPrice : v.costPrice),
         shippingCost: String(p ? p.shippingCost : v.shippingCost),
         vatRate: String(p ? p.vatRate : v.vatRate),
+        supplierRef: p ? (p.supplierRef ?? '') : '',
       };
     });
     setPriceInputs(inputs);
@@ -766,7 +829,7 @@ function SuppliersTab() {
     const inp = priceInputs[variantId];
     await wFetch('/api/supplier-prices', {
       method: 'POST',
-      body: JSON.stringify({ variantId, supplierId: selected.id, salePrice: Number(inp.salePrice), costPrice: Number(inp.costPrice), shippingCost: Number(inp.shippingCost), vatRate: Number(inp.vatRate) }),
+      body: JSON.stringify({ variantId, supplierId: selected.id, salePrice: Number(inp.salePrice), costPrice: Number(inp.costPrice), shippingCost: Number(inp.shippingCost), vatRate: Number(inp.vatRate), supplierRef: inp.supplierRef || null }),
     });
     await loadVariantsAndPrices(selected);
     setMsg('✓ Prix enregistré');
@@ -837,6 +900,7 @@ function SuppliersTab() {
                   <thead>
                     <tr style={{ background: '#0f1629' }}>
                       <th style={{ padding: '0.5rem 0.75rem', textAlign: 'left', color: '#64748b', fontWeight: 500 }}>Variante</th>
+                      <th style={{ padding: '0.5rem 0.75rem', textAlign: 'left', color: '#64748b', fontWeight: 500 }}>Réf. fournisseur</th>
                       <th style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: '#64748b', fontWeight: 500 }}>Prix vente</th>
                       <th style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: '#64748b', fontWeight: 500 }}>Coût</th>
                       <th style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: '#64748b', fontWeight: 500 }}>Livraison</th>
@@ -846,13 +910,19 @@ function SuppliersTab() {
                   </thead>
                   <tbody>
                     {pvs.map((v, i) => {
-                      const pi = priceInputs[v.id] ?? { salePrice: String(v.salePrice), costPrice: String(v.costPrice), shippingCost: String(v.shippingCost), vatRate: String(v.vatRate) };
+                      const pi = priceInputs[v.id] ?? { salePrice: String(v.salePrice), costPrice: String(v.costPrice), shippingCost: String(v.shippingCost), vatRate: String(v.vatRate), supplierRef: '' };
                       const hasOverride = !!prices[v.id];
                       return (
                         <tr key={v.id} style={{ borderTop: i === 0 ? 'none' : '1px solid #2a3045' }}>
                           <td style={{ padding: '0.5rem 0.75rem' }}>
                             {v.name}
                             {hasOverride && <span style={{ marginLeft: '0.375rem', fontSize: '0.6875rem', background: '#1e3a5f', color: '#3b82f6', borderRadius: '0.25rem', padding: '0.125rem 0.375rem' }}>personnalisé</span>}
+                          </td>
+                          <td style={{ padding: '0.375rem 0.5rem' }}>
+                            <input type="text" value={pi.supplierRef}
+                              onChange={e => setPriceInputs(prev => ({ ...prev, [v.id]: { ...prev[v.id], supplierRef: e.target.value } }))}
+                              placeholder="SKU, ASIN…"
+                              {...inp({ width: '8rem' })} />
                           </td>
                           {(['salePrice','costPrice','shippingCost','vatRate'] as const).map(field => (
                             <td key={field} style={{ padding: '0.375rem 0.5rem', textAlign: 'right' }}>

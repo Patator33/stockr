@@ -19,7 +19,7 @@ export default function SuppliersPage() {
   const [selected, setSelected] = useState<Supplier | null>(null);
   const [variants, setVariants] = useState<FlatVariant[]>([]);
   const [prices, setPrices] = useState<Record<string, SupplierPrice>>({});
-  const [priceInputs, setPriceInputs] = useState<Record<string, { salePrice: string; costPrice: string; shippingCost: string; vatRate: string }>>({});
+  const [priceInputs, setPriceInputs] = useState<Record<string, { salePrice: string; costPrice: string; shippingCost: string; vatRate: string; supplierRef: string }>>({});
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [showCreate, setShowCreate] = useState(false);
@@ -53,7 +53,7 @@ export default function SuppliersPage() {
     const byVariant: Record<string, SupplierPrice> = {};
     existingPrices.forEach(p => { byVariant[p.variantId] = p; });
     setPrices(byVariant);
-    const inputs: Record<string, { salePrice: string; costPrice: string; shippingCost: string; vatRate: string }> = {};
+    const inputs: Record<string, { salePrice: string; costPrice: string; shippingCost: string; vatRate: string; supplierRef: string }> = {};
     flat.forEach(v => {
       const p = byVariant[v.id];
       inputs[v.id] = {
@@ -61,6 +61,7 @@ export default function SuppliersPage() {
         costPrice: String(p ? p.costPrice : v.costPrice),
         shippingCost: String(p ? p.shippingCost : v.shippingCost),
         vatRate: String(p ? p.vatRate : v.vatRate),
+        supplierRef: p ? (p.supplierRef ?? '') : '',
       };
     });
     setPriceInputs(inputs);
@@ -109,6 +110,7 @@ export default function SuppliersPage() {
         variantId, supplierId: selected.id,
         salePrice: Number(inp.salePrice), costPrice: Number(inp.costPrice),
         shippingCost: Number(inp.shippingCost), vatRate: Number(inp.vatRate),
+        supplierRef: inp.supplierRef || null,
       });
       // Refresh prices
       const fresh = await api.supplierPrices.list(selected.id);
@@ -132,7 +134,7 @@ export default function SuppliersPage() {
       // Reset input to variant defaults
       const v = variants.find(x => x.id === variantId);
       if (v) {
-        setPriceInputs(prev => ({ ...prev, [variantId]: { salePrice: String(v.salePrice), costPrice: String(v.costPrice), shippingCost: String(v.shippingCost), vatRate: String(v.vatRate) } }));
+        setPriceInputs(prev => ({ ...prev, [variantId]: { salePrice: String(v.salePrice), costPrice: String(v.costPrice), shippingCost: String(v.shippingCost), vatRate: String(v.vatRate), supplierRef: '' } }));
       }
       setMsg('✓ Prix supprimé');
     } catch (e: unknown) { setMsg(e instanceof Error ? e.message : 'Erreur'); }
@@ -163,6 +165,13 @@ export default function SuppliersPage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                     <span style={{ fontWeight: 600, fontSize: 14 }}>{v.name}</span>
                     {hasOverride && <span style={{ fontSize: 10, background: '#1e3a5f', color: '#3b82f6', borderRadius: 4, padding: '2px 6px' }}>personnalisé</span>}
+                  </div>
+                  <div style={{ marginBottom: 8 }}>
+                    <p style={{ margin: '0 0 4px', fontSize: 11, color: '#64748b' }}>Référence fournisseur (SKU, ASIN…)</p>
+                    <input type="text" value={pi.supplierRef}
+                      onChange={e => setPriceInputs(prev => ({ ...prev, [v.id]: { ...prev[v.id], supplierRef: e.target.value } }))}
+                      placeholder="ex: B08XYZ1234"
+                      {...inp} />
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
                     {(['salePrice', 'costPrice', 'shippingCost', 'vatRate'] as const).map(field => (

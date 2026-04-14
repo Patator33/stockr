@@ -124,7 +124,7 @@ export const api = {
   },
   supplierPrices: {
     list: (supplierId: string) => get<SupplierPrice[]>(`/api/supplier-prices?supplierId=${supplierId}`),
-    upsert: (data: { variantId: string; supplierId: string; salePrice: number; costPrice: number; shippingCost: number; vatRate: number }) => post<SupplierPrice>('/api/supplier-prices', data),
+    upsert: (data: { variantId: string; supplierId: string; salePrice?: number; costPrice?: number; shippingCost?: number; vatRate?: number; supplierRef?: string | null }) => post<SupplierPrice>('/api/supplier-prices', data),
     delete: (id: string) => del(`/api/supplier-prices/${id}`),
   },
   locations: {
@@ -227,6 +227,7 @@ export interface SupplierPrice {
   id: string;
   variantId: string;
   supplierId: string;
+  supplierRef?: string | null;
   salePrice: number;
   costPrice: number;
   shippingCost: number;

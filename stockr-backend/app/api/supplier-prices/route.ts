@@ -23,27 +23,45 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/supplier-prices — upsert price for a (variantId, supplierId) pair
+// salePrice is optional: if omitted on create, falls back to the variant's current salePrice
 export async function POST(req: NextRequest) {
   try { await requireAuth(req); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
-  const { variantId, supplierId, salePrice, costPrice, shippingCost, vatRate } = await req.json();
-  if (!variantId || !supplierId || salePrice === undefined) {
-    return NextResponse.json({ error: 'variantId, supplierId et salePrice requis' }, { status: 400 });
+  const { variantId, supplierId, salePrice, costPrice, shippingCost, vatRate, supplierRef } = await req.json();
+  if (!variantId || !supplierId) {
+    return NextResponse.json({ error: 'variantId et supplierId requis' }, { status: 400 });
   }
+
+  // If salePrice not provided, fall back to variant default (for ref-only upserts)
+  let effectiveSalePrice = salePrice !== undefined ? Number(salePrice) : undefined;
+  if (effectiveSalePrice === undefined) {
+    const existing = await prisma.variantSupplierPrice.findUnique({
+      where: { variantId_supplierId: { variantId, supplierId } },
+    });
+    if (existing) {
+      effectiveSalePrice = existing.salePrice; // keep existing price
+    } else {
+      const variant = await prisma.productVariant.findUnique({ where: { id: variantId } });
+      effectiveSalePrice = variant?.salePrice ?? 0;
+    }
+  }
+
   const price = await prisma.variantSupplierPrice.upsert({
     where: { variantId_supplierId: { variantId, supplierId } },
     update: {
-      salePrice:    Number(salePrice),
+      salePrice:    effectiveSalePrice,
       costPrice:    costPrice    !== undefined ? Number(costPrice)    : undefined,
       shippingCost: shippingCost !== undefined ? Number(shippingCost) : undefined,
       vatRate:      vatRate      !== undefined ? Number(vatRate)      : undefined,
+      supplierRef:  supplierRef  !== undefined ? (supplierRef?.trim() || null) : undefined,
     },
     create: {
       variantId,
       supplierId,
-      salePrice:    Number(salePrice),
+      salePrice:    effectiveSalePrice,
       costPrice:    Number(costPrice    ?? 0),
       shippingCost: Number(shippingCost ?? 0),
       vatRate:      Number(vatRate      ?? 20),
+      supplierRef:  supplierRef?.trim() || null,
     },
     include: { supplier: true },
   });

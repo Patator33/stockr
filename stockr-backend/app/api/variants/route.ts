@@ -21,7 +21,10 @@ export async function GET(req: NextRequest) {
     return { ...v, activePromotion: active };
   };
 
-  if (barcode || supplierRef) {
+  const supplierId = req.nextUrl.searchParams.get('supplierId');
+
+  if (barcode || (supplierRef && !supplierId)) {
+    // Look up by barcode OR by the variant-level generic supplierRef
     const where = barcode ? { barcode } : { supplierRef: supplierRef! };
     const variant = await prisma.productVariant.findUnique({
       where,
@@ -29,6 +32,25 @@ export async function GET(req: NextRequest) {
     });
     if (!variant) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json(withActivePromo(variant));
+  }
+
+  if (supplierId && supplierRef) {
+    // Look up by per-supplier reference stored in VariantSupplierPrice
+    const sp = await prisma.variantSupplierPrice.findFirst({
+      where: { supplierId, supplierRef },
+      include: {
+        variant: {
+          include: {
+            stocks: { include: { location: true } },
+            product: true,
+            promotions: true,
+            supplierPrices: { include: { supplier: true } },
+          },
+        },
+      },
+    });
+    if (!sp) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    return NextResponse.json(withActivePromo(sp.variant));
   }
   const where = productId ? { productId } : {};
   const variants = await prisma.productVariant.findMany({

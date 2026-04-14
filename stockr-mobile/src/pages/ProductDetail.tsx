@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api, type ProductDetail, type Attribute, type Location, type Promotion } from '../api';
+import { api, type ProductDetail, type Attribute, type Location, type Promotion, type Supplier } from '../api';
 import PullToRefresh from '../components/PullToRefresh';
 import ConfirmModal from '../components/ConfirmModal';
 import { scanBarcode } from '../components/BarcodeScanner';
@@ -83,6 +83,12 @@ export default function ProductDetailPage() {
   const [evLowStock, setEvLowStock] = useState('');
   const [evLoading, setEvLoading] = useState(false);
   const [evError, setEvError] = useState('');
+  // Supplier refs per fournisseur for the variant being edited
+  const [allSuppliers, setAllSuppliers] = useState<Supplier[]>([]);
+  const [evSupplierRefs, setEvSupplierRefs] = useState<Record<string, string>>({}); // supplierId → ref
+  const [evRefsMsg, setEvRefsMsg] = useState('');
+
+  useEffect(() => { api.suppliers.list().then(setAllSuppliers).catch(() => {}); }, []);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -190,6 +196,11 @@ export default function ProductDetailPage() {
     setEvShipping(String(v.shippingCost));
     setEvLowStock(v.lowStockThreshold != null ? String(v.lowStockThreshold) : '');
     setEvError('');
+    setEvRefsMsg('');
+    // Pre-populate supplier refs from existing supplierPrices on the variant
+    const refs: Record<string, string> = {};
+    (v.supplierPrices ?? []).forEach(sp => { refs[sp.supplierId] = sp.supplierRef ?? ''; });
+    setEvSupplierRefs(refs);
   };
 
   const handleEditVariant = async (e: React.FormEvent) => {
@@ -502,6 +513,39 @@ export default function ProductDetailPage() {
                 <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">Seuil alerte stock bas (optionnel)</label>
                 <input type="number" min="0" step="1" value={evLowStock} onChange={e => setEvLowStock(e.target.value)} placeholder="Ex: 5" />
               </div>
+
+              {allSuppliers.length > 0 && (
+                <div style={{ borderTop: '1px solid #2a3045', paddingTop: '0.75rem' }}>
+                  <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">Références fournisseurs</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {allSuppliers.map(s => (
+                      <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ fontSize: '0.8125rem', color: '#94a3b8', width: '7rem', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                        <input
+                          type="text"
+                          value={evSupplierRefs[s.id] ?? ''}
+                          onChange={e => setEvSupplierRefs(prev => ({ ...prev, [s.id]: e.target.value }))}
+                          placeholder="SKU, ASIN, ref…"
+                          style={{ flex: 1 }}
+                        />
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setEvRefsMsg('');
+                            try {
+                              await api.supplierPrices.upsert({ variantId: editVariantId!, supplierId: s.id, supplierRef: evSupplierRefs[s.id] || null });
+                              setEvRefsMsg('✓');
+                              await load();
+                            } catch { setEvRefsMsg('Erreur'); }
+                          }}
+                          className="btn-ghost"
+                          style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', flexShrink: 0 }}>✓</button>
+                      </div>
+                    ))}
+                  </div>
+                  {evRefsMsg && <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: evRefsMsg === '✓' ? '#22c55e' : '#ef4444' }}>{evRefsMsg}</p>}
+                </div>
+              )}
 
               {evError && <p style={{ color: '#ef4444', fontSize: '0.875rem', margin: 0 }}>{evError}</p>}
               <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem' }}>
