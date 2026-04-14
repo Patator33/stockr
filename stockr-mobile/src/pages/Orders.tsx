@@ -209,7 +209,7 @@ export default function Orders() {
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             }}>
               <div style={{ flex: 1 }}>
-                <p style={{ margin: 0, fontWeight: 600, color: '#e2e8f0', fontSize: '0.875rem' }}>{item.variantName}</p>
+                <p style={{ margin: 0, fontWeight: 600, color: '#e2e8f0', fontSize: '0.875rem' }}>{item.variant?.name || item.variantName}</p>
                 {item.variant?.product?.name && (
                   <p style={{ margin: '0.125rem 0 0', fontSize: '0.75rem', color: '#64748b' }}>{item.variant.product.name}</p>
                 )}
@@ -294,6 +294,7 @@ export default function Orders() {
           <option value="">Toutes</option>
           <option value="pending">En attente</option>
           <option value="confirmed">Confirmées</option>
+          <option value="prepared">Préparées</option>
           <option value="shipped">Expédiées</option>
         </select>
 
@@ -329,7 +330,7 @@ export default function Orders() {
                     {fmtDate(order.createdAt)} · {order.items.length} article{order.items.length > 1 ? 's' : ''}
                   </p>
                   <p style={{ margin: '0.25rem 0 0', fontSize: '0.8125rem', color: '#94a3b8' }}>
-                    {order.items.map(i => `${i.variantName} ×${i.quantity}`).join(', ')}
+                    {order.items.map(i => `${i.variant?.name || i.variantName} ×${i.quantity}`).join(', ')}
                   </p>
                 </div>
                 <div style={{ marginLeft: '0.75rem', textAlign: 'right' }}>

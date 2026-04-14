@@ -11,6 +11,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       variants: {
         include: {
           stocks: { include: { location: true } },
+          supplierPrices: { include: { supplier: true } },
         },
         orderBy: { name: 'asc' },
       },

@@ -358,6 +358,7 @@ function ProductsTab() {
             />
           )}
 
+          <div style={{ overflowX: 'auto' }}>
           <table>
             <thead><tr><th>Nom</th><th>Attributs</th><th>Achat</th><th>Vente</th><th>TVA</th><th>Code barre</th><th>Stock</th><th></th></tr></thead>
             <tbody>
@@ -476,6 +477,7 @@ function ProductsTab() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>
