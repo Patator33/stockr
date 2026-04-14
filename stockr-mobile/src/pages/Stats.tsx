@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { api, type Stats as StatsData, type Product, type DailyRevenue } from '../api';
+import { api, type Stats as StatsData, type Product, type Supplier, type DailyRevenue } from '../api';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import PullToRefresh from '../components/PullToRefresh';
 
@@ -16,7 +16,9 @@ function fmt(n: number) {
 
 export default function Stats() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [productId, setProductId] = useState('');
+  const [supplierId, setSupplierId] = useState('');
   const [period, setPeriod] = useState(30);
   const [stats, setStats] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -24,18 +26,20 @@ export default function Stats() {
 
   const load = useCallback(async () => {
     try {
-      const [prods, st] = await Promise.all([
+      const [prods, sups, st] = await Promise.all([
         api.products.list(),
-        api.stats.get(productId || undefined, period),
+        api.suppliers.list(),
+        api.stats.get(productId || undefined, period, supplierId || undefined),
       ]);
       setProducts(prods);
+      setSuppliers(sups);
       setStats(st);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setLoading(false);
     }
-  }, [productId, period]);
+  }, [productId, supplierId, period]);
 
   useEffect(() => { load(); }, [load]);
   useAutoRefresh(load);
@@ -50,13 +54,17 @@ export default function Stats() {
         <h1 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#e2e8f0', margin: '0 0 1rem' }}>📊 Statistiques</h1>
 
         {/* Filters */}
-        <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem' }}>
-          <select value={productId} onChange={e => setProductId(e.target.value)} style={{ flex: 1 }}>
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+          <select value={period} onChange={e => setPeriod(Number(e.target.value))} style={{ flex: 1, minWidth: '8rem' }}>
+            {PERIODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+          </select>
+          <select value={productId} onChange={e => setProductId(e.target.value)} style={{ flex: 1, minWidth: '8rem' }}>
             <option value="">Tous les produits</option>
             {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <select value={period} onChange={e => setPeriod(Number(e.target.value))} style={{ flex: 1 }}>
-            {PERIODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+          <select value={supplierId} onChange={e => setSupplierId(e.target.value)} style={{ flex: 1, minWidth: '8rem' }}>
+            <option value="">Tous les fournisseurs</option>
+            {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
 

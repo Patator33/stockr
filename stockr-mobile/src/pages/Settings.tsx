@@ -220,9 +220,10 @@ export default function Settings() {
               max="100"
               value={defaultVatRate}
               onChange={e => setDefaultVatRate(e.target.value)}
+              style={{ width: '100%' }}
             />
           </div>
-          <button onClick={handleSaveVat} className="btn-primary" style={{ whiteSpace: 'nowrap' }}>
+          <button onClick={handleSaveVat} className="btn-primary" style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
             {vatSaved ? '✓ Sauvegardé' : 'Sauvegarder'}
           </button>
         </div>

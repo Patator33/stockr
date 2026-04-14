@@ -3,14 +3,16 @@ import { useEffect, useState } from 'react';
 import { wGet, wFetch } from '../_api';
 
 interface Product  { id: string; name: string; description?: string | null; defaultLocationId?: string | null; _count?: { variants: number }; }
-interface Variant  { id: string; name: string; attributes: string; costPrice: number; salePrice: number; shippingCost: number; vatRate: number; barcode?: string | null; supplierRef?: string | null; lowStockThreshold?: number | null; stocks?: { quantity: number; location: { name: string } }[]; activePromotion?: Promotion | null; }
-interface Promotion { id: string; variantId: string; price: number; startDate: string; endDate?: string | null; }
+interface Variant  { id: string; name: string; attributes: string; costPrice: number; salePrice: number; shippingCost: number; vatRate: number; barcode?: string | null; supplierRef?: string | null; lowStockThreshold?: number | null; stocks?: { quantity: number; location: { name: string } }[]; activePromotion?: Promotion | null; supplierPrices?: SupplierPrice[]; }
+interface Promotion { id: string; variantId: string; price: number; startDate: string; endDate?: string | null; supplierId?: string | null; supplier?: { id: string; name: string } | null; }
 interface Attr     { key: string; value: string; }
 interface Location { id: string; name: string; description?: string | null; isDefault?: boolean; }
 interface StockItem { variantId: string; variantName: string; productName: string; quantity: number; }
 interface StockByLoc { location: Location; items: StockItem[]; }
+interface Supplier { id: string; name: string; description?: string | null; createdAt: string; }
+interface SupplierPrice { id: string; variantId: string; supplierId: string; salePrice: number; costPrice: number; shippingCost: number; vatRate: number; supplier: Supplier; }
 
-type Tab = 'products' | 'stock' | 'locations' | 'returns';
+type Tab = 'products' | 'stock' | 'locations' | 'returns' | 'suppliers';
 
 function parseAttrs(s: string): Attr[] { try { return JSON.parse(s) || []; } catch { return []; } }
 
@@ -26,11 +28,11 @@ export default function ManagePage() {
   return (
     <div>
       <h1 style={{ margin: '0 0 1.5rem', fontSize: '1.25rem', fontWeight: 800 }}>Gestion</h1>
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
-        {(['products','stock','locations','returns'] as Tab[]).map(t => (
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+        {(['products','stock','locations','returns','suppliers'] as Tab[]).map(t => (
           <button key={t} onClick={() => setTab(t)}
             style={{ padding: '0.4375rem 0.875rem', borderRadius: '0.5rem', border: '1px solid #2a3045', background: tab === t ? '#1a2035' : 'none', color: tab === t ? '#e2e8f0' : '#64748b', fontSize: '0.875rem', fontWeight: tab === t ? 600 : 400 }}>
-            {{ products:'Produits', stock:'Stock', locations:'Zones', returns:'Retours' }[t]}
+            {{ products:'Produits', stock:'Stock', locations:'Zones', returns:'Retours', suppliers:'Fournisseurs' }[t]}
           </button>
         ))}
       </div>
@@ -38,6 +40,7 @@ export default function ManagePage() {
       {tab === 'stock'     && <StockTab />}
       {tab === 'locations' && <LocationsTab />}
       {tab === 'returns'   && <ReturnsTab />}
+      {tab === 'suppliers' && <SuppliersTab />}
     </div>
   );
 }
@@ -671,6 +674,211 @@ function ReturnsTab() {
         {msg&&<p style={{ margin:'0 0 0.75rem', fontSize:'0.875rem', color:msg.startsWith('✓')?'#22c55e':'#ef4444' }}>{msg}</p>}
         <button onClick={submit} className="btn-primary" disabled={loading}>{loading?'Traitement…':'Valider les retours'}</button>
       </div>
+    </div>
+  );
+}
+
+/* ── Suppliers Tab ── */
+function SuppliersTab() {
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [selected, setSelected] = useState<Supplier | null>(null);
+  const [variants, setVariants] = useState<{ id: string; name: string; productName: string; costPrice: number; salePrice: number; shippingCost: number; vatRate: number }[]>([]);
+  const [prices, setPrices] = useState<Record<string, SupplierPrice>>({});  // keyed by variantId
+  const [priceInputs, setPriceInputs] = useState<Record<string, { salePrice: string; costPrice: string; shippingCost: string; vatRate: string }>>({});
+  const [newName, setNewName] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [msg, setMsg] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const loadSuppliers = async () => {
+    const data = await wGet<Supplier[]>('/api/suppliers');
+    setSuppliers(data);
+  };
+
+  const loadVariantsAndPrices = async (sup: Supplier) => {
+    const [vars, existingPrices] = await Promise.all([
+      wGet<{ id: string; name: string; product: { name: string }; costPrice: number; salePrice: number; shippingCost: number; vatRate: number }[]>('/api/variants'),
+      wGet<SupplierPrice[]>(`/api/supplier-prices?supplierId=${sup.id}`),
+    ]);
+    const flat = vars.map(v => ({ id: v.id, name: v.name, productName: v.product?.name ?? '', costPrice: v.costPrice, salePrice: v.salePrice, shippingCost: v.shippingCost, vatRate: v.vatRate }));
+    setVariants(flat);
+    const byVariant: Record<string, SupplierPrice> = {};
+    existingPrices.forEach(p => { byVariant[p.variantId] = p; });
+    setPrices(byVariant);
+    const inputs: Record<string, { salePrice: string; costPrice: string; shippingCost: string; vatRate: string }> = {};
+    flat.forEach(v => {
+      const p = byVariant[v.id];
+      inputs[v.id] = {
+        salePrice: String(p ? p.salePrice : v.salePrice),
+        costPrice: String(p ? p.costPrice : v.costPrice),
+        shippingCost: String(p ? p.shippingCost : v.shippingCost),
+        vatRate: String(p ? p.vatRate : v.vatRate),
+      };
+    });
+    setPriceInputs(inputs);
+  };
+
+  useEffect(() => { loadSuppliers(); }, []);
+
+  const selectSupplier = (s: Supplier) => {
+    setSelected(s);
+    setEditId(null);
+    loadVariantsAndPrices(s);
+  };
+
+  const createSupplier = async () => {
+    if (!newName.trim()) return;
+    setLoading(true);
+    try {
+      await wFetch('/api/suppliers', { method: 'POST', body: JSON.stringify({ name: newName.trim(), description: newDesc.trim() || null }) });
+      setNewName(''); setNewDesc('');
+      setMsg('✓ Fournisseur créé');
+      await loadSuppliers();
+    } catch { setMsg('Erreur création'); }
+    setLoading(false);
+  };
+
+  const saveEdit = async (id: string) => {
+    setLoading(true);
+    try {
+      await wFetch(`/api/suppliers/${id}`, { method: 'PUT', body: JSON.stringify({ name: editName.trim(), description: editDesc.trim() || null }) });
+      setEditId(null);
+      setMsg('✓ Mis à jour');
+      await loadSuppliers();
+      if (selected?.id === id) setSelected(s => s ? { ...s, name: editName.trim(), description: editDesc.trim() || null } : s);
+    } catch { setMsg('Erreur mise à jour'); }
+    setLoading(false);
+  };
+
+  const deleteSupplier = async (id: string) => {
+    if (!confirm('Supprimer ce fournisseur ?')) return;
+    await wFetch(`/api/suppliers/${id}`, { method: 'DELETE' });
+    if (selected?.id === id) { setSelected(null); setVariants([]); setPrices({}); }
+    await loadSuppliers();
+    setMsg('✓ Supprimé');
+  };
+
+  const savePrice = async (variantId: string) => {
+    if (!selected) return;
+    const inp = priceInputs[variantId];
+    await wFetch('/api/supplier-prices', {
+      method: 'POST',
+      body: JSON.stringify({ variantId, supplierId: selected.id, salePrice: Number(inp.salePrice), costPrice: Number(inp.costPrice), shippingCost: Number(inp.shippingCost), vatRate: Number(inp.vatRate) }),
+    });
+    await loadVariantsAndPrices(selected);
+    setMsg('✓ Prix enregistré');
+  };
+
+  const deletePrice = async (priceId: string) => {
+    if (!selected) return;
+    await wFetch(`/api/supplier-prices/${priceId}`, { method: 'DELETE' });
+    await loadVariantsAndPrices(selected);
+    setMsg('✓ Prix supprimé');
+  };
+
+  const inp = (style?: React.CSSProperties) => ({ style: { background: '#0f1629', border: '1px solid #2a3045', borderRadius: '0.375rem', color: '#e2e8f0', padding: '0.375rem 0.5rem', fontSize: '0.8125rem', ...style } });
+
+  // Group variants by product
+  const byProduct: Record<string, typeof variants> = {};
+  variants.forEach(v => { (byProduct[v.productName] = byProduct[v.productName] || []).push(v); });
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: '1.5rem', alignItems: 'start' }}>
+      {/* Left: supplier list */}
+      <div style={{ background: '#1a2035', borderRadius: '0.75rem', padding: '1rem' }}>
+        <h3 style={{ margin: '0 0 1rem', fontSize: '0.9375rem', fontWeight: 700 }}>Fournisseurs</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', marginBottom: '1rem' }}>
+          {suppliers.map(s => (
+            <div key={s.id} style={{ borderRadius: '0.5rem', border: `1px solid ${selected?.id === s.id ? '#3b82f6' : '#2a3045'}`, background: selected?.id === s.id ? '#1e3a5f' : '#0f1629', padding: '0.5rem 0.75rem' }}>
+              {editId === s.id ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                  <input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Nom" {...inp({ width: '100%', boxSizing: 'border-box' })} />
+                  <input value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="Description" {...inp({ width: '100%', boxSizing: 'border-box' })} />
+                  <div style={{ display: 'flex', gap: '0.375rem' }}>
+                    <button onClick={() => saveEdit(s.id)} disabled={loading} style={{ flex: 1, padding: '0.3125rem', background: '#3b82f6', border: 'none', borderRadius: '0.375rem', color: '#fff', fontSize: '0.8125rem', cursor: 'pointer' }}>✓</button>
+                    <button onClick={() => setEditId(null)} style={{ flex: 1, padding: '0.3125rem', background: '#374151', border: 'none', borderRadius: '0.375rem', color: '#e2e8f0', fontSize: '0.8125rem', cursor: 'pointer' }}>✕</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => selectSupplier(s)}>
+                    <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>{s.name}</div>
+                    {s.description && <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{s.description}</div>}
+                  </div>
+                  <button onClick={() => { setEditId(s.id); setEditName(s.name); setEditDesc(s.description ?? ''); }} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.875rem' }}>✏️</button>
+                  <button onClick={() => deleteSupplier(s.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.875rem' }}>🗑</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        {/* Create form */}
+        <div style={{ borderTop: '1px solid #2a3045', paddingTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+          <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Nom du fournisseur" {...inp({ width: '100%', boxSizing: 'border-box' })} />
+          <input value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="Description (optionnel)" {...inp({ width: '100%', boxSizing: 'border-box' })} />
+          <button onClick={createSupplier} disabled={loading || !newName.trim()} className="btn-primary" style={{ fontSize: '0.8125rem' }}>+ Ajouter</button>
+        </div>
+        {msg && <p style={{ margin: '0.5rem 0 0', fontSize: '0.8125rem', color: msg.startsWith('✓') ? '#22c55e' : '#ef4444' }}>{msg}</p>}
+      </div>
+
+      {/* Right: per-variant prices */}
+      {selected ? (
+        <div>
+          <h3 style={{ margin: '0 0 1rem', fontSize: '0.9375rem', fontWeight: 700 }}>Prix pour <span style={{ color: '#3b82f6' }}>{selected.name}</span></h3>
+          <p style={{ margin: '0 0 1rem', fontSize: '0.8125rem', color: '#64748b' }}>Les prix vides utilisent les prix par défaut de la variante. Enregistrez une ligne pour surcharger.</p>
+          {Object.entries(byProduct).map(([productName, pvs]) => (
+            <div key={productName} style={{ marginBottom: '1.5rem' }}>
+              <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.875rem', fontWeight: 600, color: '#94a3b8' }}>{productName}</h4>
+              <div style={{ background: '#1a2035', borderRadius: '0.75rem', overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+                  <thead>
+                    <tr style={{ background: '#0f1629' }}>
+                      <th style={{ padding: '0.5rem 0.75rem', textAlign: 'left', color: '#64748b', fontWeight: 500 }}>Variante</th>
+                      <th style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: '#64748b', fontWeight: 500 }}>Prix vente</th>
+                      <th style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: '#64748b', fontWeight: 500 }}>Coût</th>
+                      <th style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: '#64748b', fontWeight: 500 }}>Livraison</th>
+                      <th style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: '#64748b', fontWeight: 500 }}>TVA %</th>
+                      <th style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: '#64748b', fontWeight: 500 }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pvs.map((v, i) => {
+                      const pi = priceInputs[v.id] ?? { salePrice: String(v.salePrice), costPrice: String(v.costPrice), shippingCost: String(v.shippingCost), vatRate: String(v.vatRate) };
+                      const hasOverride = !!prices[v.id];
+                      return (
+                        <tr key={v.id} style={{ borderTop: i === 0 ? 'none' : '1px solid #2a3045' }}>
+                          <td style={{ padding: '0.5rem 0.75rem' }}>
+                            {v.name}
+                            {hasOverride && <span style={{ marginLeft: '0.375rem', fontSize: '0.6875rem', background: '#1e3a5f', color: '#3b82f6', borderRadius: '0.25rem', padding: '0.125rem 0.375rem' }}>personnalisé</span>}
+                          </td>
+                          {(['salePrice','costPrice','shippingCost','vatRate'] as const).map(field => (
+                            <td key={field} style={{ padding: '0.375rem 0.5rem', textAlign: 'right' }}>
+                              <input type="number" step="0.01" min={0} value={pi[field]}
+                                onChange={e => setPriceInputs(prev => ({ ...prev, [v.id]: { ...prev[v.id], [field]: e.target.value } }))}
+                                {...inp({ width: '5rem', textAlign: 'right' })} />
+                            </td>
+                          ))}
+                          <td style={{ padding: '0.375rem 0.5rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <button onClick={() => savePrice(v.id)} style={{ padding: '0.3125rem 0.625rem', background: '#3b82f6', border: 'none', borderRadius: '0.375rem', color: '#fff', fontSize: '0.8125rem', cursor: 'pointer', marginRight: '0.25rem' }}>✓</button>
+                            {hasOverride && <button onClick={() => deletePrice(prices[v.id].id)} style={{ padding: '0.3125rem 0.625rem', background: '#7f1d1d', border: 'none', borderRadius: '0.375rem', color: '#fca5a5', fontSize: '0.8125rem', cursor: 'pointer' }}>✕</button>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '200px', color: '#64748b', fontSize: '0.875rem' }}>
+          Sélectionnez un fournisseur pour gérer ses prix
+        </div>
+      )}
     </div>
   );
 }

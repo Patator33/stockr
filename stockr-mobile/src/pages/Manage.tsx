@@ -7,6 +7,7 @@ export default function Manage() {
     { icon: '🏭', label: 'Zones de stockage', sub: 'Entrepôts, étagères, boutiques…', path: '/manage/locations' },
     { icon: '↩', label: 'Retours de stock', sub: 'Remettre des articles en stock', path: '/manage/stock-returns' },
     { icon: '🔄', label: 'Mouvements de stock', sub: 'Historique de tous les mouvements', path: '/manage/stock-movements' },
+    { icon: '🏪', label: 'Fournisseurs', sub: 'Marketplaces et prix par fournisseur', path: '/manage/suppliers' },
     { icon: '📊', label: 'Statistiques', sub: 'CA, marges, top variantes', path: '/stats' },
   ];
 

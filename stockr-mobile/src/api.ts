@@ -113,8 +113,19 @@ export const api = {
   },
   promotions: {
     list: (variantId: string) => get<Promotion[]>(`/api/promotions?variantId=${variantId}`),
-    create: (data: { variantId: string; price: number; startDate: string; endDate?: string | null }) => post<Promotion>('/api/promotions', data),
+    create: (data: { variantId: string; price: number; startDate: string; endDate?: string | null; supplierId?: string | null }) => post<Promotion>('/api/promotions', data),
     delete: (id: string) => del(`/api/promotions/${id}`),
+  },
+  suppliers: {
+    list: () => get<Supplier[]>('/api/suppliers'),
+    create: (data: { name: string; description?: string | null }) => post<Supplier>('/api/suppliers', data),
+    update: (id: string, data: { name: string; description?: string | null }) => put<Supplier>(`/api/suppliers/${id}`, data),
+    delete: (id: string) => del(`/api/suppliers/${id}`),
+  },
+  supplierPrices: {
+    list: (supplierId: string) => get<SupplierPrice[]>(`/api/supplier-prices?supplierId=${supplierId}`),
+    upsert: (data: { variantId: string; supplierId: string; salePrice: number; costPrice: number; shippingCost: number; vatRate: number }) => post<SupplierPrice>('/api/supplier-prices', data),
+    delete: (id: string) => del(`/api/supplier-prices/${id}`),
   },
   locations: {
     list: () => get<Location[]>('/api/locations'),
@@ -130,12 +141,13 @@ export const api = {
     transfer: (data: TransferInput) => post('/api/stocks/transfer', data),
   },
   sales: {
-    list: (params?: { productId?: string; from?: string; to?: string; page?: number }) => {
+    list: (params?: { productId?: string; from?: string; to?: string; page?: number; supplierId?: string }) => {
       const q = new URLSearchParams();
       if (params?.productId) q.set('productId', params.productId);
       if (params?.from) q.set('from', params.from);
       if (params?.to) q.set('to', params.to);
       if (params?.page) q.set('page', String(params.page));
+      if (params?.supplierId) q.set('supplierId', params.supplierId);
       return get<SalesPage>(`/api/sales?${q}`);
     },
     create: (data: SaleInput) => post<Sale>('/api/sales', data),
@@ -161,10 +173,11 @@ export const api = {
     delete: (id: string) => del(`/api/orders/${id}`),
   },
   stats: {
-    get: (productId?: string, period?: number) => {
+    get: (productId?: string, period?: number, supplierId?: string) => {
       const q = new URLSearchParams();
-      if (productId) q.set('productId', productId);
-      if (period) q.set('period', String(period));
+      if (productId)  q.set('productId',  productId);
+      if (period)     q.set('period',     String(period));
+      if (supplierId) q.set('supplierId', supplierId);
       return get<Stats>(`/api/stats?${q}`);
     },
   },
@@ -203,12 +216,32 @@ export interface Attribute {
   value: string;
 }
 
+export interface Supplier {
+  id: string;
+  name: string;
+  description?: string | null;
+  createdAt: string;
+}
+
+export interface SupplierPrice {
+  id: string;
+  variantId: string;
+  supplierId: string;
+  salePrice: number;
+  costPrice: number;
+  shippingCost: number;
+  vatRate: number;
+  supplier: Supplier;
+}
+
 export interface Promotion {
   id: string;
   variantId: string;
   price: number;
   startDate: string;
   endDate?: string | null;
+  supplierId?: string | null;
+  supplier?: { id: string; name: string } | null;
   createdAt: string;
 }
 
@@ -226,6 +259,7 @@ export interface Variant {
   lowStockThreshold?: number | null;
   stocks?: StockEntry[];
   activePromotion?: Promotion | null;
+  supplierPrices?: SupplierPrice[];
   createdAt: string;
 }
 
@@ -286,6 +320,7 @@ export interface Sale {
   id: string;
   variantId: string;
   locationId: string;
+  supplierId?: string | null;
   quantity: number;
   unitSalePrice: number;
   unitCostPrice: number;
@@ -295,12 +330,14 @@ export interface Sale {
   createdAt: string;
   variant?: { name: string; product: { id: string; name: string } };
   location?: Location;
+  supplier?: { id: string; name: string } | null;
   returns?: Return[];
 }
 
 export interface SaleInput {
   variantId: string;
   locationId: string;
+  supplierId?: string | null;
   quantity: number;
   unitSalePrice?: number;
   unitCostPrice?: number;

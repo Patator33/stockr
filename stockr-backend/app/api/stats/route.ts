@@ -5,7 +5,8 @@ import { prisma } from '@/lib/prisma';
 export async function GET(req: NextRequest) {
   try { await requireAuth(req); } catch { return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); }
   const { searchParams } = req.nextUrl;
-  const productId = searchParams.get('productId');
+  const productId  = searchParams.get('productId');
+  const supplierId = searchParams.get('supplierId');
   const period = searchParams.get('period') || '30'; // days
 
   const days = Number(period);
@@ -13,7 +14,8 @@ export async function GET(req: NextRequest) {
   from.setDate(from.getDate() - days);
 
   const saleWhere: Record<string, unknown> = { createdAt: { gte: from } };
-  if (productId) saleWhere.variant = { productId };
+  if (productId)  saleWhere.variant    = { productId };
+  if (supplierId) saleWhere.supplierId = supplierId;
 
   const sales = await prisma.sale.findMany({
     where: saleWhere,

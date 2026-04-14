@@ -5,6 +5,7 @@ import { wGet } from '../_api';
 interface DailyRevenue { date: string; revenue: number; }
 interface Stats { period: number; totalRevenue: number; totalCost: number; totalShipping: number; grossMargin: number; netMargin: number; totalVat: number; totalSoldQty: number; totalReturnedQty: number; totalStock: number; topVariants: { name: string; productName: string; sold: number; returned: number; revenue: number; margin: number }[]; dailyRevenue: DailyRevenue[]; }
 interface Product { id: string; name: string; }
+interface Supplier { id: string; name: string; }
 
 function Card({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
@@ -61,28 +62,32 @@ function RevenueChart({ data, period }: { data: DailyRevenue[]; period: string }
 }
 
 export default function StatsPage() {
-  const [stats,     setStats]     = useState<Stats | null>(null);
-  const [products,  setProducts]  = useState<Product[]>([]);
-  const [period,    setPeriod]    = useState('30');
-  const [productId, setProductId] = useState('');
-  const [loading,   setLoading]   = useState(true);
+  const [stats,      setStats]      = useState<Stats | null>(null);
+  const [products,   setProducts]   = useState<Product[]>([]);
+  const [suppliers,  setSuppliers]  = useState<Supplier[]>([]);
+  const [period,     setPeriod]     = useState('30');
+  const [productId,  setProductId]  = useState('');
+  const [supplierId, setSupplierId] = useState('');
+  const [loading,    setLoading]    = useState(true);
 
   useEffect(() => {
     wGet<Product[]>('/api/products').then(setProducts).catch(() => {});
+    wGet<Supplier[]>('/api/suppliers').then(setSuppliers).catch(() => {});
   }, []);
 
   useEffect(() => {
     setLoading(true);
     const q = new URLSearchParams({ period });
-    if (productId) q.set('productId', productId);
+    if (productId)  q.set('productId',  productId);
+    if (supplierId) q.set('supplierId', supplierId);
     wGet<Stats>(`/api/stats?${q}`).then(setStats).catch(() => {}).finally(() => setLoading(false));
-  }, [period, productId]);
+  }, [period, productId, supplierId]);
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
         <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Statistiques</h1>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <select value={period} onChange={e => setPeriod(e.target.value)} style={{ width: 'auto' }}>
             <option value="7">7 jours</option>
             <option value="30">30 jours</option>
@@ -92,6 +97,10 @@ export default function StatsPage() {
           <select value={productId} onChange={e => setProductId(e.target.value)} style={{ width: 'auto' }}>
             <option value="">Tous les produits</option>
             {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <select value={supplierId} onChange={e => setSupplierId(e.target.value)} style={{ width: 'auto' }}>
+            <option value="">Tous les fournisseurs</option>
+            {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
       </div>

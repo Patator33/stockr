@@ -38,17 +38,17 @@ model Product {
 }
 
 model ProductVariant {
-  id                String          @id @default(uuid())
+  id                String                @id @default(uuid())
   productId         String
-  product           Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product           Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
   name              String
-  attributes        String          @default("[]")
-  costPrice         Float           @default(0)
-  salePrice         Float           @default(0)
-  shippingCost      Float           @default(0)
-  vatRate           Float           @default(20)
-  barcode           String?         @unique
-  supplierRef       String?         @unique
+  attributes        String                @default("[]")
+  costPrice         Float                 @default(0)
+  salePrice         Float                 @default(0)
+  shippingCost      Float                 @default(0)
+  vatRate           Float                 @default(20)
+  barcode           String?               @unique
+  supplierRef       String?               @unique
   lowStockThreshold Int?
   stocks            Stock[]
   sales             Sale[]
@@ -56,8 +56,35 @@ model ProductVariant {
   orderItems        OrderItem[]
   promotions        Promotion[]
   stockMovements    StockMovement[]
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  supplierPrices    VariantSupplierPrice[]
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+}
+
+model Supplier {
+  id             String                @id @default(uuid())
+  name           String                @unique
+  description    String?
+  variantPrices  VariantSupplierPrice[]
+  sales          Sale[]
+  promotions     Promotion[]
+  createdAt      DateTime              @default(now())
+}
+
+model VariantSupplierPrice {
+  id           String         @id @default(uuid())
+  variantId    String
+  variant      ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  supplierId   String
+  supplier     Supplier       @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  salePrice    Float
+  costPrice    Float          @default(0)
+  shippingCost Float          @default(0)
+  vatRate      Float          @default(20)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@unique([variantId, supplierId])
 }
 
 model StorageLocation {
@@ -107,6 +134,8 @@ model Sale {
   location         StorageLocation @relation(fields: [locationId], references: [id])
   orderId          String?
   order            Order?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  supplierId       String?
+  supplier         Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   quantity         Int
   unitSalePrice    Float
   unitCostPrice    Float
@@ -118,13 +147,15 @@ model Sale {
 }
 
 model Promotion {
-  id        String         @id @default(uuid())
-  variantId String
-  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
-  price     Float
-  startDate DateTime
-  endDate   DateTime?
-  createdAt DateTime       @default(now())
+  id         String         @id @default(uuid())
+  variantId  String
+  variant    ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  supplierId String?
+  supplier   Supplier?      @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  price      Float
+  startDate  DateTime
+  endDate    DateTime?
+  createdAt  DateTime       @default(now())
 }
 
 model Return {

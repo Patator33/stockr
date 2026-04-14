@@ -2,8 +2,10 @@
 import { useEffect, useState } from 'react';
 import { wGet, wFetch, getWebToken } from '../_api';
 
-interface Sale { id: string; variantId: string; locationId: string; quantity: number; unitSalePrice: number; unitCostPrice: number; unitShippingCost: number; vatRate: number; notes?: string | null; createdAt: string; variant?: { name: string; product: { name: string } }; location?: { name: string }; returns?: { id: string; quantity: number; reason?: string | null }[]; order?: { id: string; customerName?: string | null; customerEmail?: string | null } | null; }
-interface Variant { id: string; name: string; salePrice: number; costPrice: number; shippingCost: number; vatRate: number; activePromotion?: { price: number; startDate: string; endDate?: string | null } | null; product?: { defaultLocationId?: string | null }; }
+interface Sale { id: string; variantId: string; locationId: string; supplierId?: string | null; quantity: number; unitSalePrice: number; unitCostPrice: number; unitShippingCost: number; vatRate: number; notes?: string | null; createdAt: string; variant?: { name: string; product: { name: string } }; location?: { name: string }; supplier?: { id: string; name: string } | null; returns?: { id: string; quantity: number; reason?: string | null }[]; order?: { id: string; customerName?: string | null; customerEmail?: string | null } | null; }
+interface Supplier { id: string; name: string; }
+interface SupplierPrice { salePrice: number; costPrice: number; shippingCost: number; vatRate: number; }
+interface Variant { id: string; name: string; salePrice: number; costPrice: number; shippingCost: number; vatRate: number; activePromotion?: { price: number; startDate: string; endDate?: string | null } | null; product?: { defaultLocationId?: string | null }; supplierPrices?: (SupplierPrice & { supplierId: string })[]; }
 interface Location { id: string; name: string; isDefault?: boolean; }
 interface SalesPage { sales: Sale[]; total: number; pages: number; }
 
@@ -11,21 +13,24 @@ export default function SalesPage() {
   const [data,      setData]      = useState<SalesPage>({ sales: [], total: 0, pages: 1 });
   const [variants,  setVariants]  = useState<Variant[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [page,      setPage]      = useState(1);
   const [loading,   setLoading]   = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ variantId: '', locationId: '', quantity: 1, unitSalePrice: 0, unitCostPrice: 0, unitShippingCost: 0, notes: '' });
+  const [form, setForm] = useState({ variantId: '', locationId: '', supplierId: '', quantity: 1, unitSalePrice: 0, unitCostPrice: 0, unitShippingCost: 0, notes: '' });
   const [variantsLoading, setVariantsLoading] = useState(false);
   const [createErr, setCreateErr] = useState('');
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
+  const [filterSupplier, setFilterSupplier] = useState('');
   const [exportFrom, setExportFrom] = useState('');
   const [exportTo,   setExportTo]   = useState('');
 
-  const load = (p = 1, q = search) => {
+  const load = (p = 1, q = search, sup = filterSupplier) => {
     setLoading(true);
     const params = new URLSearchParams({ page: String(p) });
     if (q) params.set('search', q);
+    if (sup) params.set('supplierId', sup);
     wGet<SalesPage>(`/api/sales?${params}`).then(setData).catch(() => {}).finally(() => setLoading(false));
   };
 
@@ -36,13 +41,14 @@ export default function SalesPage() {
       const def = locs.find(l => l.isDefault);
       if (def) setForm(f => ({ ...f, locationId: def.id }));
     }).catch(() => {});
+    wGet<Supplier[]>('/api/suppliers').then(setSuppliers).catch(() => {});
   }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setSearch(searchInput);
     setPage(1);
-    load(1, searchInput);
+    load(1, searchInput, filterSupplier);
   };
 
   const openCreate = async () => {
@@ -55,18 +61,30 @@ export default function SalesPage() {
     } catch { /* ignore */ } finally { setVariantsLoading(false); }
   };
 
-  const handleVariantChange = (variantId: string) => {
+  const resolveVariantPrices = (variantId: string, supplierId: string) => {
     const v = variants.find(x => x.id === variantId);
-    const price = v?.activePromotion ? v.activePromotion.price : (v?.salePrice || 0);
-    const defLoc = v?.product?.defaultLocationId;
-    setForm(f => ({ ...f, variantId, unitSalePrice: price, unitCostPrice: v?.costPrice || 0, unitShippingCost: v?.shippingCost || 0, ...(defLoc ? { locationId: defLoc } : {}) }));
+    if (!v) return {};
+    const sp = supplierId ? v.supplierPrices?.find(p => p.supplierId === supplierId) : null;
+    const hasPromo = !!v.activePromotion;
+    const price = hasPromo ? v.activePromotion!.price : (sp?.salePrice ?? v.salePrice);
+    const defLoc = v.product?.defaultLocationId;
+    return { unitSalePrice: price, unitCostPrice: sp?.costPrice ?? v.costPrice, unitShippingCost: sp?.shippingCost ?? v.shippingCost, ...(defLoc ? { locationId: defLoc } : {}) };
+  };
+
+  const handleVariantChange = (variantId: string) => {
+    setForm(f => ({ ...f, variantId, ...resolveVariantPrices(variantId, f.supplierId) }));
+  };
+
+  const handleSupplierChange = (supplierId: string) => {
+    setForm(f => ({ ...f, supplierId, ...(f.variantId ? resolveVariantPrices(f.variantId, supplierId) : {}) }));
   };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreateErr('');
     try {
-      const res = await wFetch('/api/sales', { method: 'POST', body: JSON.stringify({ ...form, quantity: Number(form.quantity) }) });
+      const body = { ...form, quantity: Number(form.quantity), supplierId: form.supplierId || null };
+      const res = await wFetch('/api/sales', { method: 'POST', body: JSON.stringify(body) });
       const d = await res.json();
       if (!res.ok) { setCreateErr(d.error || 'Erreur'); return; }
       setShowCreate(false);
@@ -129,18 +147,29 @@ export default function SalesPage() {
         </div>
       </div>
 
-      {/* Search bar */}
-      <form onSubmit={handleSearch} style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-        <input value={searchInput} onChange={e => setSearchInput(e.target.value)} placeholder="Rechercher produit, variante, notes…" style={{ flex: 1 }} />
+      {/* Search + supplier filter bar */}
+      <form onSubmit={handleSearch} style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        <input value={searchInput} onChange={e => setSearchInput(e.target.value)} placeholder="Rechercher produit, variante, notes…" style={{ flex: 1, minWidth: '12rem' }} />
+        <select value={filterSupplier} onChange={e => { setFilterSupplier(e.target.value); setPage(1); load(1, search, e.target.value); }} style={{ minWidth: '10rem' }}>
+          <option value="">Tous les fournisseurs</option>
+          {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
         <button type="submit" className="btn-ghost" style={{ fontSize: '0.8125rem' }}>Rechercher</button>
-        {search && <button type="button" onClick={() => { setSearchInput(''); setSearch(''); load(1, ''); }} className="btn-ghost" style={{ fontSize: '0.8125rem' }}>✕</button>}
+        {(search || filterSupplier) && <button type="button" onClick={() => { setSearchInput(''); setSearch(''); setFilterSupplier(''); load(1, '', ''); }} className="btn-ghost" style={{ fontSize: '0.8125rem' }}>✕</button>}
       </form>
 
       {showCreate && (
         <div className="card" style={{ marginBottom: '1.5rem' }}>
           <h2 style={{ margin: '0 0 1rem', fontSize: '1rem', fontWeight: 700 }}>Nouvelle vente</h2>
           <form onSubmit={handleCreate} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-            <div style={{ gridColumn: '1 / -1' }}>
+            <div>
+              <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Fournisseur / Marketplace</label>
+              <select value={form.supplierId} onChange={e => handleSupplierChange(e.target.value)}>
+                <option value="">— Aucun —</option>
+                {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+            <div>
               <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Variante</label>
               <select value={form.variantId} onChange={e => handleVariantChange(e.target.value)} required disabled={variantsLoading}>
                 <option value="">{variantsLoading ? 'Chargement…' : '— Sélectionner —'}</option>
@@ -193,7 +222,7 @@ export default function SalesPage() {
           <>
             <p style={{ margin: '0 0 0.75rem', fontSize: '0.875rem', color: '#64748b' }}>{data.total} vente{data.total !== 1 ? 's' : ''}{search && ` — recherche: "${search}"`}</p>
             <table>
-              <thead><tr><th>Date</th><th>Produit</th><th>Zone</th><th>Qté</th><th>CA</th><th>TVA</th><th>Marge</th><th>Commande</th><th>Notes</th><th></th></tr></thead>
+              <thead><tr><th>Date</th><th>Produit</th><th>Fournisseur</th><th>Zone</th><th>Qté</th><th>CA</th><th>TVA</th><th>Marge</th><th>Commande</th><th>Notes</th><th></th></tr></thead>
               <tbody>
                 {data.sales.flatMap(s => {
                   const ret = s.returns?.reduce((sum, r) => sum + r.quantity, 0) || 0;
@@ -207,6 +236,7 @@ export default function SalesPage() {
                     <tr key={s.id}>
                       <td style={{ fontSize: '0.75rem', color: '#64748b' }}>{new Date(s.createdAt).toLocaleDateString('fr-FR')}</td>
                       <td>{s.variant ? `${s.variant.product.name} · ${s.variant.name}` : s.variantId.slice(0, 8)}</td>
+                      <td style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{s.supplier?.name || '—'}</td>
                       <td style={{ fontSize: '0.75rem' }}>{s.location?.name || '—'}</td>
                       <td>{s.quantity}{ret > 0 && <span style={{ color: '#ef4444', fontSize: '0.75rem' }}> -{ret}</span>}</td>
                       <td style={{ color: '#3b82f6' }}>{revenue.toFixed(2)} €</td>
@@ -224,7 +254,7 @@ export default function SalesPage() {
                     ...(s.returns || []).map(r => (
                       <tr key={`ret-${r.id}`} style={{ background: '#0f1218' }}>
                         <td></td>
-                        <td colSpan={7} style={{ fontSize: '0.75rem', color: '#64748b', paddingLeft: '2rem' }}>↩ Retour: {r.quantity} · {r.reason || '—'}</td>
+                        <td colSpan={8} style={{ fontSize: '0.75rem', color: '#64748b', paddingLeft: '2rem' }}>↩ Retour: {r.quantity} · {r.reason || '—'}</td>
                         <td></td>
                         <td><button onClick={() => deleteReturn(r.id)} style={{ background: 'none', border: '1px solid #7f1d1d', borderRadius: '0.375rem', color: '#ef4444', fontSize: '0.7rem', padding: '0.2rem 0.4rem' }}>✕</button></td>
                       </tr>

@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     const where = barcode ? { barcode } : { supplierRef: supplierRef! };
     const variant = await prisma.productVariant.findUnique({
       where,
-      include: { stocks: { include: { location: true } }, product: true, promotions: true },
+      include: { stocks: { include: { location: true } }, product: true, promotions: true, supplierPrices: { include: { supplier: true } } },
     });
     if (!variant) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json(withActivePromo(variant));
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   const where = productId ? { productId } : {};
   const variants = await prisma.productVariant.findMany({
     where,
-    include: { stocks: { include: { location: true } }, promotions: true, product: { select: { defaultLocationId: true } } },
+    include: { stocks: { include: { location: true } }, promotions: true, product: { select: { defaultLocationId: true } }, supplierPrices: { include: { supplier: true } } },
     orderBy: { name: 'asc' },
   });
   return NextResponse.json(variants.map(withActivePromo));

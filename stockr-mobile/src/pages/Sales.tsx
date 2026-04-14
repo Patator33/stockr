@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { api, type Sale, type Product, type Variant, type StockByLocation } from '../api';
+import { api, type Sale, type Product, type Variant, type StockByLocation, type Supplier } from '../api';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import PullToRefresh from '../components/PullToRefresh';
 import ConfirmModal from '../components/ConfirmModal';
@@ -20,7 +20,9 @@ interface NewSaleModal {
 export default function Sales() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [productFilter, setProductFilter] = useState('');
+  const [supplierFilter, setSupplierFilter] = useState('');
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -36,6 +38,7 @@ export default function Sales() {
   const [nsProductId, setNsProductId] = useState('');
   const [nsVariants, setNsVariants] = useState<Variant[]>([]);
   const [nsVariantId, setNsVariantId] = useState('');
+  const [nsSupplierId, setNsSupplierId] = useState('');
   const [nsStocks, setNsStocks] = useState<StockByLocation[]>([]);
   const [nsLocationId, setNsLocationId] = useState('');
   const [nsQty, setNsQty] = useState('1');
@@ -47,19 +50,21 @@ export default function Sales() {
 
   const load = useCallback(async () => {
     try {
-      const [res, prods] = await Promise.all([
-        api.sales.list({ productId: productFilter || undefined }),
+      const [res, prods, sups] = await Promise.all([
+        api.sales.list({ productId: productFilter || undefined, supplierId: supplierFilter || undefined }),
         api.products.list(),
+        api.suppliers.list(),
       ]);
       setSales(res.sales);
       setTotal(res.total);
       setProducts(prods);
+      setSuppliers(sups);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setLoading(false);
     }
-  }, [productFilter]);
+  }, [productFilter, supplierFilter]);
 
   useEffect(() => { load(); }, [load]);
   useAutoRefresh(load);
@@ -68,6 +73,7 @@ export default function Sales() {
     setNsProductId('');
     setNsVariants([]);
     setNsVariantId('');
+    setNsSupplierId('');
     setNsStocks([]);
     setNsLocationId('');
     setNsQty('1');
@@ -95,13 +101,22 @@ export default function Sales() {
     if (product?.defaultLocationId) setNsLocationId(product.defaultLocationId);
   };
 
+  const resolvePrice = (variant: Variant, supplierId: string): number => {
+    if (variant.activePromotion) return variant.activePromotion.price;
+    const sp = supplierId ? variant.supplierPrices?.find(p => p.supplierId === supplierId) : null;
+    return sp?.salePrice ?? variant.salePrice;
+  };
+
   const onNsVariantChange = (vid: string) => {
     setNsVariantId(vid);
     const variant = nsVariants.find(v => v.id === vid);
-    if (variant) {
-      const price = variant.activePromotion ? variant.activePromotion.price : variant.salePrice;
-      setNsPrice(String(price));
-    }
+    if (variant) setNsPrice(String(resolvePrice(variant, nsSupplierId)));
+  };
+
+  const onNsSupplierChange = (sid: string) => {
+    setNsSupplierId(sid);
+    const variant = nsVariants.find(v => v.id === nsVariantId);
+    if (variant) setNsPrice(String(resolvePrice(variant, sid)));
   };
 
   const handleScanForSale = async () => {
@@ -151,13 +166,15 @@ export default function Sales() {
     setNsError('');
     setNsLoading(true);
     try {
+      const spOverride = nsSupplierId ? selectedVariant?.supplierPrices?.find(p => p.supplierId === nsSupplierId) : null;
       await api.sales.create({
         variantId: nsVariantId,
         locationId: nsLocationId,
+        supplierId: nsSupplierId || null,
         quantity: Number(nsQty),
         unitSalePrice: Number(nsPrice),
-        unitCostPrice: selectedVariant?.costPrice ?? 0,
-        unitShippingCost: selectedVariant?.shippingCost ?? 0,
+        unitCostPrice: spOverride?.costPrice ?? selectedVariant?.costPrice ?? 0,
+        unitShippingCost: spOverride?.shippingCost ?? selectedVariant?.shippingCost ?? 0,
         notes: nsNotes || undefined,
       });
       setNewSaleModal(null);
@@ -218,11 +235,17 @@ export default function Sales() {
             </button>
           </div>
 
-          {/* Filter */}
-          <select value={productFilter} onChange={e => setProductFilter(e.target.value)} style={{ marginBottom: '1rem' }}>
-            <option value="">Tous les produits</option>
-            {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          {/* Filters */}
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+            <select value={productFilter} onChange={e => setProductFilter(e.target.value)} style={{ flex: 1, minWidth: '8rem' }}>
+              <option value="">Tous les produits</option>
+              {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <select value={supplierFilter} onChange={e => setSupplierFilter(e.target.value)} style={{ flex: 1, minWidth: '8rem' }}>
+              <option value="">Tous les fournisseurs</option>
+              {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
 
           <p className="text-text-muted text-xs" style={{ marginBottom: '0.75rem' }}>{total} vente{total > 1 ? 's' : ''}</p>
 
@@ -240,6 +263,7 @@ export default function Sales() {
                     </p>
                     <p style={{ margin: '0.125rem 0 0', fontSize: '0.75rem', color: '#64748b' }}>
                       {sale.variant?.product?.name} · {sale.location?.name}
+                      {sale.supplier && <span style={{ color: '#3b82f6', marginLeft: '0.375rem' }}>· {sale.supplier.name}</span>}
                     </p>
                     <p style={{ margin: '0.125rem 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
                       {fmtDate(sale.createdAt)}
@@ -332,6 +356,14 @@ export default function Sales() {
                 <div style={{ flex: 1, height: '1px', background: '#2a3045' }} />
                 <span style={{ color: '#475569', fontSize: '0.75rem' }}>ou choisir manuellement</span>
                 <div style={{ flex: 1, height: '1px', background: '#2a3045' }} />
+              </div>
+
+              <div>
+                <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">Fournisseur / Marketplace (optionnel)</label>
+                <select value={nsSupplierId} onChange={e => onNsSupplierChange(e.target.value)}>
+                  <option value="">— Aucun —</option>
+                  {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
               </div>
 
               <div>
