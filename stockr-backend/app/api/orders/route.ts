@@ -53,9 +53,18 @@ export async function POST(req: NextRequest) {
         let resolvedName = item.variantName || item.supplierRef || item.barcode || 'Article';
         if (item.supplierRef) {
           console.log('[orders POST] resolving by supplierRef:', item.supplierRef);
+          // 1. Try generic variant-level supplierRef
           const v = await prisma.productVariant.findUnique({ where: { supplierRef: item.supplierRef }, include: { product: true } });
-          if (v) { variantId = v.id; resolvedName = item.variantName || v.name; }
-          else console.warn('[orders POST] no variant found for supplierRef:', item.supplierRef);
+          if (v) { variantId = v.id; resolvedName = v.name; }
+          else {
+            // 2. Try per-supplier VariantSupplierPrice.supplierRef
+            const sp = await prisma.variantSupplierPrice.findFirst({
+              where: { supplierRef: item.supplierRef },
+              include: { variant: true },
+            });
+            if (sp) { variantId = sp.variantId; resolvedName = sp.variant.name; }
+            else console.warn('[orders POST] no variant found for supplierRef:', item.supplierRef);
+          }
         }
         if (!variantId && item.barcode) {
           console.log('[orders POST] resolving by barcode:', item.barcode);
