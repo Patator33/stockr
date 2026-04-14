@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { wGet, wFetch } from '../_api';
 
-interface OrderItem { id: string; variantName: string; quantity: number; scanned: number; barcode?: string | null; variantId?: string | null; }
+interface OrderItem { id: string; variantName: string; quantity: number; scanned: number; barcode?: string | null; variantId?: string | null; variant?: { name: string; product?: { name: string } } | null; }
 interface Order { id: string; status: string; customerName?: string | null; customerEmail?: string | null; notes?: string | null; shippingDate?: string | null; locationId?: string | null; items: OrderItem[]; createdAt: string; }
 interface Location { id: string; name: string; isDefault?: boolean; }
 interface Variant { id: string; name: string; barcode?: string | null; supplierRef?: string | null; }
@@ -284,7 +284,7 @@ export default function OrdersPage() {
             <tbody>
               {selected.items.map(item => (
                 <tr key={item.id}>
-                  <td>{item.variantName}</td>
+                  <td>{item.variant?.name || item.variantName}</td>
                   <td>{item.quantity}</td>
                   <td><span style={{ color: item.scanned >= item.quantity ? '#22c55e' : item.scanned > 0 ? '#f59e0b' : '#64748b', fontWeight: 600 }}>{item.scanned}/{item.quantity}</span></td>
                 </tr>
