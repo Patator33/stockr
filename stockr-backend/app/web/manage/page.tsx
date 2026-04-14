@@ -112,7 +112,6 @@ function VariantForm({
       <div><label style={{ fontSize:'0.7rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Frais port €</label><input type="number" step="0.01" value={f.shippingCost} onChange={e => setF(p=>({...p,shippingCost:Number(e.target.value)}))} /></div>
       <div><label style={{ fontSize:'0.7rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>TVA %</label><input type="number" step="0.1" min="0" max="100" value={f.vatRate} onChange={e => setF(p=>({...p,vatRate:Number(e.target.value)}))} /></div>
       <div><label style={{ fontSize:'0.7rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Code barre</label><input value={f.barcode} onChange={e => setF(p=>({...p,barcode:e.target.value}))} /></div>
-      <div><label style={{ fontSize:'0.7rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Réf. fournisseur</label><input value={f.supplierRef} onChange={e => setF(p=>({...p,supplierRef:e.target.value}))} /></div>
       <div><label style={{ fontSize:'0.7rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Alerte stock bas (seuil)</label><input type="number" min="0" step="1" value={f.lowStockThreshold} onChange={e => setF(p=>({...p,lowStockThreshold:e.target.value}))} placeholder="ex: 5" /></div>
 
       {error && <p style={{ gridColumn:'1 / -1', margin:0, color:'#ef4444', fontSize:'0.8125rem' }}>{error}</p>}
@@ -359,57 +358,6 @@ function ProductsTab() {
             />
           )}
 
-          {editV && (
-            <>
-              <VariantForm
-                title={`Modifier — ${editV.name}`}
-                initial={{
-                  name: editV.name,
-                  costPrice: editV.costPrice,
-                  salePrice: editV.salePrice,
-                  shippingCost: editV.shippingCost,
-                  vatRate: editV.vatRate,
-                  barcode: editV.barcode || '',
-                  supplierRef: editV.supplierRef || '',
-                  lowStockThreshold: editV.lowStockThreshold != null ? String(editV.lowStockThreshold) : '',
-                  attrs: parseAttrs(editV.attributes).length > 0 ? parseAttrs(editV.attributes) : [{ key:'', value:'' }],
-                }}
-                attrKeys={attrKeys}
-                onSubmit={updateVariant}
-                onCancel={() => { setEditV(null); setVError(''); }}
-                error={vError}
-                loading={vLoading}
-              />
-              {allSuppliers.length > 0 && (
-                <div style={{ background:'#0f1629', borderRadius:'0.5rem', padding:'0.75rem', marginBottom:'1rem' }}>
-                  <p style={{ margin:'0 0 0.5rem', fontWeight:700, fontSize:'0.8125rem', color:'#94a3b8' }}>Références fournisseurs</p>
-                  <div style={{ display:'flex', flexDirection:'column', gap:'0.375rem' }}>
-                    {allSuppliers.map(s => (
-                      <div key={s.id} style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
-                        <span style={{ width:'8rem', fontSize:'0.8125rem', color:'#64748b', flexShrink:0 }}>{s.name}</span>
-                        <input
-                          value={supplierRefInputs[s.id] ?? ''}
-                          onChange={e => setSupplierRefInputs(prev => ({ ...prev, [s.id]: e.target.value }))}
-                          placeholder="SKU, ASIN, ref…"
-                          style={{ flex:1 }}
-                        />
-                        <button
-                          onClick={async () => {
-                            setSupplierRefMsg('');
-                            await wFetch('/api/supplier-prices', { method:'POST', body:JSON.stringify({ variantId:editV.id, supplierId:s.id, supplierRef:supplierRefInputs[s.id]||null }) });
-                            setSupplierRefMsg('✓ Ref sauvegardée');
-                            if (selected) loadVariants(selected.id);
-                          }}
-                          className="btn-ghost" style={{ fontSize:'0.75rem', padding:'0.2rem 0.6rem', whiteSpace:'nowrap' }}>✓</button>
-                      </div>
-                    ))}
-                  </div>
-                  {supplierRefMsg && <p style={{ margin:'0.375rem 0 0', fontSize:'0.75rem', color: supplierRefMsg.startsWith('✓')?'#22c55e':'#ef4444' }}>{supplierRefMsg}</p>}
-                </div>
-              )}
-            </>
-          )}
-
           <table>
             <thead><tr><th>Nom</th><th>Attributs</th><th>Achat</th><th>Vente</th><th>TVA</th><th>Code barre</th><th>Stock</th><th></th></tr></thead>
             <tbody>
@@ -478,12 +426,12 @@ function ProductsTab() {
                     )}
                     {editV?.id === v.id && (
                       <tr key={`edit-${v.id}`}>
-                        <td colSpan={7} style={{ padding:'0.5rem 0', background:'transparent' }}>
+                        <td colSpan={8} style={{ padding:'0.5rem 0', background:'transparent' }}>
                           <VariantForm
                             title={`Modifier — ${v.name}`}
                             initial={{
                               name:v.name, costPrice:v.costPrice, salePrice:v.salePrice, shippingCost:v.shippingCost, vatRate:v.vatRate??20,
-                              barcode:v.barcode||'', supplierRef:v.supplierRef||'',
+                              barcode:v.barcode||'', supplierRef:'',
                               lowStockThreshold: v.lowStockThreshold != null ? String(v.lowStockThreshold) : '',
                               attrs:attrs.length>0?attrs:[{key:'',value:''}],
                             }}
@@ -493,6 +441,33 @@ function ProductsTab() {
                             error={vError}
                             loading={vLoading}
                           />
+                          {allSuppliers.length > 0 && (
+                            <div style={{ background:'#0f1629', borderRadius:'0.5rem', padding:'0.75rem', marginBottom:'0.5rem' }}>
+                              <p style={{ margin:'0 0 0.5rem', fontWeight:700, fontSize:'0.8125rem', color:'#94a3b8' }}>Références fournisseurs</p>
+                              <div style={{ display:'flex', flexDirection:'column', gap:'0.375rem' }}>
+                                {allSuppliers.map(s => (
+                                  <div key={s.id} style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+                                    <span style={{ width:'8rem', fontSize:'0.8125rem', color:'#64748b', flexShrink:0 }}>{s.name}</span>
+                                    <input
+                                      value={supplierRefInputs[s.id] ?? ''}
+                                      onChange={e => setSupplierRefInputs(prev => ({ ...prev, [s.id]: e.target.value }))}
+                                      placeholder="SKU, ASIN, ref…"
+                                      style={{ flex:1 }}
+                                    />
+                                    <button
+                                      onClick={async () => {
+                                        setSupplierRefMsg('');
+                                        await wFetch('/api/supplier-prices', { method:'POST', body:JSON.stringify({ variantId:v.id, supplierId:s.id, supplierRef:supplierRefInputs[s.id]||null }) });
+                                        setSupplierRefMsg('✓ Ref sauvegardée');
+                                        if (selected) loadVariants(selected.id);
+                                      }}
+                                      className="btn-ghost" style={{ fontSize:'0.75rem', padding:'0.2rem 0.6rem', whiteSpace:'nowrap' }}>✓</button>
+                                  </div>
+                                ))}
+                              </div>
+                              {supplierRefMsg && <p style={{ margin:'0.375rem 0 0', fontSize:'0.75rem', color: supplierRefMsg.startsWith('✓')?'#22c55e':'#ef4444' }}>{supplierRefMsg}</p>}
+                            </div>
+                          )}
                         </td>
                       </tr>
                     )}

@@ -330,13 +330,16 @@ export default function ProductDetailPage() {
                     ))}
                   </div>
                 )}
-                {/* Supplier ref */}
-                <SupplierRefField
-                  variantId={v.id}
-                  value={v.supplierRef ?? ''}
-                  onSaved={load}
-                  variant={v}
-                />
+                {/* Supplier refs (read-only badges) */}
+                {(v.supplierPrices ?? []).filter(sp => sp.supplierRef).length > 0 && (
+                  <div style={{ marginTop: '0.375rem', display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                    {(v.supplierPrices ?? []).filter(sp => sp.supplierRef).map(sp => (
+                      <span key={sp.supplierId} style={{ fontSize: '0.7rem', background: '#1e3a5f', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '0.25rem', padding: '0.125rem 0.375rem' }}>
+                        {sp.supplier.name}: {sp.supplierRef}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   {v.barcode ? (
                     <span style={{ fontSize: '0.75rem', color: '#64748b', background: '#1e2535', border: '1px solid #2a3045', borderRadius: '0.375rem', padding: '0.125rem 0.5rem', fontFamily: 'monospace' }}>
