@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, type Product, type StockByLocation, type Location, type Variant, type Stats } from '../api';
+import { api, type Product, type StockByLocation, type Location, type Variant, type Stats, type LowStockAlert } from '../api';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { useOrders } from '../hooks/useOrders';
 import PullToRefresh from '../components/PullToRefresh';
@@ -41,6 +41,8 @@ export default function Dashboard() {
   const [stocks, setStocks] = useState<StockByLocation[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [lowStockAlerts, setLowStockAlerts] = useState<LowStockAlert[]>([]);
+  const [overdueOrders, setOverdueOrders] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -85,6 +87,8 @@ export default function Dashboard() {
         ]);
         setStocks(stks);
         setStats(st);
+        if (st.lowStockAlerts) setLowStockAlerts(st.lowStockAlerts);
+        if (st.overdueOrders !== undefined) setOverdueOrders(st.overdueOrders);
         if (!selectedProductId && prods[0]) setSelectedProductId(prods[0].id);
       }
     } catch (e: unknown) {
@@ -203,6 +207,35 @@ export default function Dashboard() {
               Stock<span style={{ color: '#2b8cee' }}>r</span>
             </h1>
           </div>
+
+          {/* Overdue orders alert */}
+          {overdueOrders > 0 && (
+            <div
+              onClick={() => navigate('/orders')}
+              style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.75rem', padding: '0.75rem 1rem', marginBottom: '0.75rem', cursor: 'pointer' }}
+            >
+              <span style={{ fontWeight: 700, color: '#ef4444', fontSize: '0.875rem' }}>
+                ⚠️ {overdueOrders} commande{overdueOrders > 1 ? 's' : ''} en retard (&gt;7 jours)
+              </span>
+            </div>
+          )}
+
+          {/* Low stock alerts */}
+          {lowStockAlerts.length > 0 && (
+            <div style={{ background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '0.75rem', padding: '0.75rem 1rem', marginBottom: '0.75rem' }}>
+              <p style={{ margin: '0 0 0.375rem', fontWeight: 700, color: '#f59e0b', fontSize: '0.875rem' }}>
+                📉 Stock faible ({lowStockAlerts.length} variante{lowStockAlerts.length > 1 ? 's' : ''})
+              </p>
+              {lowStockAlerts.slice(0, 3).map(a => (
+                <p key={a.variantId} style={{ margin: '0.125rem 0 0', fontSize: '0.75rem', color: '#e2e8f0' }}>
+                  {a.variantName} — {a.totalQty} / {a.threshold} min
+                </p>
+              ))}
+              {lowStockAlerts.length > 3 && (
+                <p style={{ margin: '0.25rem 0 0', fontSize: '0.7rem', color: '#94a3b8' }}>+ {lowStockAlerts.length - 3} autre{lowStockAlerts.length - 3 > 1 ? 's' : ''}…</p>
+              )}
+            </div>
+          )}
 
           {/* Pending orders widget */}
           {activeOrders.length > 0 && (

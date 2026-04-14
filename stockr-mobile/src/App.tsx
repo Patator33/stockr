@@ -15,6 +15,7 @@ import Products from './pages/Products';
 import ProductDetail from './pages/ProductDetail';
 import Locations from './pages/Locations';
 import StockReturns from './pages/StockReturns';
+import StockMovements from './pages/StockMovements';
 import Settings from './pages/Settings';
 
 const TABS = ['/', '/orders', '/sales', '/manage', '/settings'];
@@ -88,6 +89,7 @@ export default function App() {
         <Route path="/manage/products/:id" element={<AuthGuard><AppShell><ProductDetail /></AppShell></AuthGuard>} />
         <Route path="/manage/locations" element={<AuthGuard><AppShell><Locations /></AppShell></AuthGuard>} />
         <Route path="/manage/stock-returns" element={<AuthGuard><AppShell><StockReturns /></AppShell></AuthGuard>} />
+        <Route path="/manage/stock-movements" element={<AuthGuard><AppShell><StockMovements /></AppShell></AuthGuard>} />
         <Route path="/settings" element={<AuthGuard><AppShell><Settings /></AppShell></AuthGuard>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

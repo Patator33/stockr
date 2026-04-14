@@ -80,6 +80,7 @@ export default function ProductDetailPage() {
   const [evCost, setEvCost] = useState('');
   const [evSale, setEvSale] = useState('');
   const [evShipping, setEvShipping] = useState('');
+  const [evLowStock, setEvLowStock] = useState('');
   const [evLoading, setEvLoading] = useState(false);
   const [evError, setEvError] = useState('');
 
@@ -187,6 +188,7 @@ export default function ProductDetailPage() {
     setEvCost(String(v.costPrice));
     setEvSale(String(v.salePrice));
     setEvShipping(String(v.shippingCost));
+    setEvLowStock(v.lowStockThreshold != null ? String(v.lowStockThreshold) : '');
     setEvError('');
   };
 
@@ -205,6 +207,7 @@ export default function ProductDetailPage() {
         shippingCost: Number(evShipping) || 0,
         barcode: variant.barcode,
         supplierRef: variant.supplierRef,
+        lowStockThreshold: evLowStock !== '' ? Number(evLowStock) : null,
       });
       setEditVariantId(null);
       await load();
@@ -298,10 +301,13 @@ export default function ProductDetailPage() {
                     </p>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <p style={{ margin: 0, fontWeight: 700, fontSize: '1.125rem', color: totalStock === 0 ? '#ef4444' : totalStock < 5 ? '#f59e0b' : '#22c55e' }}>
+                    <p style={{ margin: 0, fontWeight: 700, fontSize: '1.125rem', color: totalStock === 0 ? '#ef4444' : (v.lowStockThreshold != null && totalStock <= v.lowStockThreshold) ? '#f59e0b' : '#22c55e' }}>
                       {totalStock}
                     </p>
                     <p style={{ margin: 0, fontSize: '0.7rem', color: '#64748b' }}>en stock</p>
+                    {v.lowStockThreshold != null && totalStock <= v.lowStockThreshold && (
+                      <p style={{ margin: '0.125rem 0 0', fontSize: '0.65rem', color: '#f59e0b' }}>📉 min {v.lowStockThreshold}</p>
+                    )}
                   </div>
                 </div>
                 {v.stocks.length > 0 && (
@@ -490,6 +496,11 @@ export default function ProductDetailPage() {
                   <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">Expédition €</label>
                   <input type="number" step="0.01" min="0" value={evShipping} onChange={e => setEvShipping(e.target.value)} placeholder="0.00" />
                 </div>
+              </div>
+
+              <div>
+                <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">Seuil alerte stock bas (optionnel)</label>
+                <input type="number" min="0" step="1" value={evLowStock} onChange={e => setEvLowStock(e.target.value)} placeholder="Ex: 5" />
               </div>
 
               {evError && <p style={{ color: '#ef4444', fontSize: '0.875rem', margin: 0 }}>{evError}</p>}

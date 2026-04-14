@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { getServerUrl, setServerUrl, clearToken, api, type UserProfile, type AuditLog } from '../api';
+import { getServerUrl, setServerUrl, clearToken, getToken, api, type UserProfile, type AuditLog } from '../api';
 import { getDebugLogs } from '../hooks/useNotifications';
 
 function actionLabel(action: string) {
@@ -41,6 +41,13 @@ export default function Settings() {
   const [logsLoading, setLogsLoading] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
 
+  // App settings
+  const [defaultVatRate, setDefaultVatRate] = useState('20');
+  const [vatSaved, setVatSaved] = useState(false);
+
+  // Backup
+  const [backupMsg, setBackupMsg] = useState('');
+
   useEffect(() => {
     getServerUrl().then(url => setServerUrlState(url));
     api.auth.me().then(me => {
@@ -48,6 +55,9 @@ export default function Settings() {
         setIsAdmin(true);
         api.users.list().then(setUsers).catch(() => {});
       }
+    }).catch(() => {});
+    api.settings.get().then(s => {
+      if (s.defaultVatRate) setDefaultVatRate(s.defaultVatRate);
     }).catch(() => {});
   }, []);
 
@@ -138,6 +148,36 @@ export default function Settings() {
     }
   };
 
+  const handleSaveVat = async () => {
+    try {
+      await api.settings.update({ defaultVatRate });
+      setVatSaved(true);
+      setTimeout(() => setVatSaved(false), 2000);
+    } catch { /* ignore */ }
+  };
+
+  const handleDownloadBackup = async () => {
+    setBackupMsg('');
+    try {
+      const base = await getServerUrl();
+      const token = await getToken();
+      const res = await fetch(`${base}/api/backup`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) { setBackupMsg('Erreur lors de la sauvegarde.'); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `stockr_backup_${new Date().toISOString().slice(0, 10)}.db`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setBackupMsg('✓ Sauvegarde téléchargée.');
+    } catch {
+      setBackupMsg('Erreur lors de la sauvegarde.');
+    }
+  };
+
   const handleLogout = async () => {
     await clearToken();
     navigate('/login', { replace: true });
@@ -166,6 +206,46 @@ export default function Settings() {
           {saved ? '✓ Sauvegardé' : 'Sauvegarder'}
         </button>
       </form>
+
+      {/* App settings */}
+      <div style={{ borderTop: '1px solid #2a3045', paddingTop: '1.5rem', marginBottom: '1.5rem' }}>
+        <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', margin: '0 0 0.75rem' }}>⚙️ Paramètres</h2>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>TVA par défaut (%)</label>
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              max="100"
+              value={defaultVatRate}
+              onChange={e => setDefaultVatRate(e.target.value)}
+            />
+          </div>
+          <button onClick={handleSaveVat} className="btn-primary" style={{ whiteSpace: 'nowrap' }}>
+            {vatSaved ? '✓ Sauvegardé' : 'Sauvegarder'}
+          </button>
+        </div>
+        <p style={{ margin: '0.375rem 0 0', fontSize: '0.75rem', color: '#475569' }}>
+          S'applique aux nouvelles variantes. Chaque variante peut avoir son propre taux.
+        </p>
+      </div>
+
+      {/* Backup */}
+      <div style={{ borderTop: '1px solid #2a3045', paddingTop: '1.5rem', marginBottom: '1.5rem' }}>
+        <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', margin: '0 0 0.75rem' }}>💾 Sauvegarde</h2>
+        <button onClick={handleDownloadBackup} className="btn-primary" style={{ width: '100%' }}>
+          ⬇ Télécharger la sauvegarde
+        </button>
+        {backupMsg && (
+          <p style={{ margin: '0.5rem 0 0', fontSize: '0.8125rem', color: backupMsg.startsWith('✓') ? '#22c55e' : '#ef4444' }}>
+            {backupMsg}
+          </p>
+        )}
+        <p style={{ margin: '0.375rem 0 0', fontSize: '0.75rem', color: '#475569' }}>
+          Fichier SQLite complet — à conserver en lieu sûr.
+        </p>
+      </div>
 
       {/* Notifications */}
       <div style={{ borderTop: '1px solid #2a3045', paddingTop: '1.5rem', marginBottom: '1.5rem' }}>

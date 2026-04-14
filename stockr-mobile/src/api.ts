@@ -108,7 +108,7 @@ export const api = {
     list: (productId?: string) => get<Variant[]>(`/api/variants${productId ? `?productId=${productId}` : ''}`),
     findByBarcode: (barcode: string) => get<Variant & { product: { id: string; name: string } }>(`/api/variants?barcode=${encodeURIComponent(barcode)}`),
     create: (data: VariantInput) => post<Variant>('/api/variants', data),
-    update: (id: string, data: Omit<VariantInput, 'productId'> & { barcode?: string | null; supplierRef?: string | null }) => put<Variant>(`/api/variants/${id}`, data),
+    update: (id: string, data: Omit<VariantInput, 'productId'> & { barcode?: string | null; supplierRef?: string | null; lowStockThreshold?: number | null }) => put<Variant>(`/api/variants/${id}`, data),
     delete: (id: string) => del(`/api/variants/${id}`),
   },
   promotions: {
@@ -168,6 +168,20 @@ export const api = {
       return get<Stats>(`/api/stats?${q}`);
     },
   },
+  stockMovements: {
+    list: (params?: { variantId?: string; locationId?: string; type?: string; page?: number }) => {
+      const q = new URLSearchParams();
+      if (params?.variantId) q.set('variantId', params.variantId);
+      if (params?.locationId) q.set('locationId', params.locationId);
+      if (params?.type) q.set('type', params.type);
+      if (params?.page) q.set('page', String(params.page));
+      return get<StockMovementsPage>(`/api/stock-movements?${q}`);
+    },
+  },
+  settings: {
+    get: () => get<Record<string, string>>('/api/settings'),
+    update: (data: Record<string, string | number>) => patch<Record<string, string>>('/api/settings', data),
+  },
 };
 
 // Types
@@ -209,6 +223,7 @@ export interface Variant {
   vatRate: number;
   barcode?: string | null;
   supplierRef?: string | null;
+  lowStockThreshold?: number | null;
   stocks?: StockEntry[];
   activePromotion?: Promotion | null;
   createdAt: string;
@@ -309,6 +324,19 @@ export interface SalesPage {
   pages: number;
 }
 
+export interface LowStockAlert {
+  variantId: string;
+  variantName: string;
+  productName: string;
+  totalQty: number;
+  threshold: number;
+}
+
+export interface DailyRevenue {
+  date: string;
+  revenue: number;
+}
+
 export interface Stats {
   period: number;
   totalRevenue: number;
@@ -321,6 +349,30 @@ export interface Stats {
   totalReturnedQty: number;
   totalStock: number;
   topVariants: TopVariant[];
+  dailyRevenue?: DailyRevenue[];
+  lowStockAlerts?: LowStockAlert[];
+  overdueOrders?: number;
+}
+
+export interface StockMovement {
+  id: string;
+  variantId: string;
+  locationId: string;
+  type: string;
+  delta: number;
+  userId?: string | null;
+  ref?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  variant: { name: string; product: { name: string } };
+  location: { name: string };
+}
+
+export interface StockMovementsPage {
+  movements: StockMovement[];
+  total: number;
+  page: number;
+  pages: number;
 }
 
 export interface TopVariant {

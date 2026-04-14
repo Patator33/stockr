@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { api, type Stats as StatsData, type Product } from '../api';
+import { api, type Stats as StatsData, type Product, type DailyRevenue } from '../api';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import PullToRefresh from '../components/PullToRefresh';
 
@@ -77,6 +77,40 @@ export default function Stats() {
               <StatCard label="Retours" value={String(stats.totalReturnedQty)} color={stats.totalReturnedQty > 0 ? '#f59e0b' : '#e2e8f0'} />
               <StatCard label="Stock total" value={String(stats.totalStock)} color="#2b8cee" />
             </div>
+
+            {/* Daily revenue bar chart */}
+            {stats.dailyRevenue && stats.dailyRevenue.length > 0 && (() => {
+              const daily = stats.dailyRevenue!;
+              const maxRev = Math.max(...daily.map(d => d.revenue), 0.01);
+              const barCount = Math.min(daily.length, period <= 7 ? 7 : period <= 30 ? 30 : 14);
+              const shown = daily.slice(-barCount);
+              const barW = Math.floor(300 / barCount);
+              const svgW = barW * barCount;
+              return (
+                <div style={{ background: '#141824', border: '1px solid #2a3045', borderRadius: '0.75rem', padding: '0.75rem', marginBottom: '1.25rem' }}>
+                  <p style={{ margin: '0 0 0.5rem', fontSize: '0.8125rem', fontWeight: 700, color: '#94a3b8' }}>CA par jour</p>
+                  <div style={{ overflowX: 'auto' }}>
+                    <svg width={svgW} height={80} style={{ display: 'block', minWidth: '100%' }}>
+                      {shown.map((d, i) => {
+                        const h = maxRev > 0 ? Math.round((d.revenue / maxRev) * 60) : 0;
+                        const x = i * barW + 2;
+                        const y = 70 - h;
+                        return (
+                          <g key={d.date}>
+                            <rect x={x} y={y} width={barW - 4} height={h || 2} rx={2} fill={h > 0 ? '#2b8cee' : '#1e2535'} />
+                            {barCount <= 14 && (
+                              <text x={x + (barW - 4) / 2} y={78} textAnchor="middle" fontSize={8} fill="#475569">
+                                {new Date(d.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}
+                              </text>
+                            )}
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Top variants */}
             {stats.topVariants.length > 0 && (

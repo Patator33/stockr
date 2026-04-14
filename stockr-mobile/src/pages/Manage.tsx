@@ -6,6 +6,7 @@ export default function Manage() {
     { icon: '📦', label: 'Produits', sub: 'Gérer vos produits et variantes', path: '/manage/products' },
     { icon: '🏭', label: 'Zones de stockage', sub: 'Entrepôts, étagères, boutiques…', path: '/manage/locations' },
     { icon: '↩', label: 'Retours de stock', sub: 'Remettre des articles en stock', path: '/manage/stock-returns' },
+    { icon: '🔄', label: 'Mouvements de stock', sub: 'Historique de tous les mouvements', path: '/manage/stock-movements' },
     { icon: '📊', label: 'Statistiques', sub: 'CA, marges, top variantes', path: '/stats' },
   ];
 
