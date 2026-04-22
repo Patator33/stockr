@@ -165,7 +165,7 @@ export const api = {
   orders: {
     list: (status?: string) => get<Order[]>(`/api/orders${status ? `?status=${status}` : ''}`),
     get: (id: string) => get<Order>(`/api/orders/${id}`),
-    updateStatus: (id: string, status: string) => patch<Order>(`/api/orders/${id}`, { status }),
+    updateStatus: (id: string, status: string, trackingRef?: string | null) => patch<Order>(`/api/orders/${id}`, { status, ...(trackingRef !== undefined ? { trackingRef } : {}) }),
     updateItemScanned: (orderId: string, itemId: string, scanned: number) =>
       patch<OrderItem>(`/api/orders/${orderId}`, { itemId, scanned }),
     updateLocation: (orderId: string, locationId: string) =>
@@ -441,6 +441,7 @@ export interface Order {
   notes?: string | null;
   status: string; // pending | confirmed | prepared | shipped
   shippingDate?: string | null;
+  trackingRef?: string | null;
   locationId?: string | null;
   items: OrderItem[];
   createdAt: string;

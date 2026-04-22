@@ -39,11 +39,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json(order);
   }
 
-  // Update order status and/or shippingDate
-  if (body.status !== undefined || body.shippingDate !== undefined) {
+  // Update order status and/or shippingDate and/or trackingRef
+  if (body.status !== undefined || body.shippingDate !== undefined || body.trackingRef !== undefined) {
     const data: Record<string, unknown> = {};
     if (body.status !== undefined) data.status = body.status;
     if (body.shippingDate !== undefined) data.shippingDate = body.shippingDate ? new Date(body.shippingDate) : null;
+    if (body.trackingRef !== undefined) data.trackingRef = body.trackingRef || null;
 
     // Destock + create Sales on ship
     if (body.status === 'shipped') {

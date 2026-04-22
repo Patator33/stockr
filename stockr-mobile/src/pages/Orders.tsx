@@ -169,6 +169,11 @@ export default function Orders() {
             📅 Expédition prévue : {new Date(selectedOrder.shippingDate).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
           </div>
         )}
+        {selectedOrder.trackingRef && (
+          <div style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '0.75rem', padding: '0.625rem 0.875rem', marginBottom: '0.75rem', fontSize: '0.8125rem', color: '#22c55e' }}>
+            📦 Suivi : {selectedOrder.trackingRef}
+          </div>
+        )}
         {selectedOrder.notes && (
           <div style={{ background: 'rgba(43,140,238,0.06)', border: '1px solid rgba(43,140,238,0.2)', borderRadius: '0.75rem', padding: '0.75rem', marginBottom: '1rem', fontSize: '0.875rem', color: '#94a3b8' }}>
             {selectedOrder.notes}
@@ -251,7 +256,13 @@ export default function Orders() {
           {selectedOrder.status === 'prepared' && (
             <button
               onClick={async () => {
-                await api.orders.updateStatus(selectedOrder.id, 'shipped');
+                setScanError('');
+                let trackingRef: string | null = null;
+                try {
+                  const code = await scanBarcode();
+                  if (code) trackingRef = code;
+                } catch { /* scan annulé */ }
+                await api.orders.updateStatus(selectedOrder.id, 'shipped', trackingRef);
                 const updated = await api.orders.get(selectedOrder.id);
                 setSelectedOrder(updated);
                 await reload();
