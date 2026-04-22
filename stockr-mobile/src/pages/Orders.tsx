@@ -170,8 +170,12 @@ export default function Orders() {
           </div>
         )}
         {selectedOrder.trackingRef && (
-          <div style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '0.75rem', padding: '0.625rem 0.875rem', marginBottom: '0.75rem', fontSize: '0.8125rem', color: '#22c55e' }}>
-            📦 Suivi : {selectedOrder.trackingRef}
+          <div style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '0.75rem', padding: '0.625rem 0.875rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '0.8125rem', color: '#22c55e', flex: 1 }}>📦 Suivi : <strong>{selectedOrder.trackingRef}</strong></span>
+            <button onClick={() => navigator.clipboard.writeText(selectedOrder.trackingRef!)}
+              style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.5rem', color: '#22c55e', fontSize: '0.75rem', padding: '0.25rem 0.75rem', cursor: 'pointer' }}>
+              Copier
+            </button>
           </div>
         )}
         {selectedOrder.notes && (
