@@ -34,6 +34,7 @@ export default function SettingsPage() {
 
   // App settings
   const [defaultVatRate, setDefaultVatRate] = useState('20');
+  const [webhookUrl,     setWebhookUrl]     = useState('');
   const [settingsSaved, setSettingsSaved]   = useState(false);
 
   // Backup/restore
@@ -52,6 +53,7 @@ export default function SettingsPage() {
   useEffect(() => {
     wGet<Record<string, string>>('/api/settings').then(s => {
       if (s.defaultVatRate) setDefaultVatRate(s.defaultVatRate);
+      if (s.webhookUrl)     setWebhookUrl(s.webhookUrl);
     }).catch(() => {});
     if (!isAdmin) return;
     wGet<UserProfile[]>('/api/users').then(setUsers).catch(() => {});
@@ -59,7 +61,7 @@ export default function SettingsPage() {
   }, [isAdmin]);
 
   const saveSettings = async () => {
-    await wFetch('/api/settings', { method: 'PATCH', body: JSON.stringify({ defaultVatRate }) });
+    await wFetch('/api/settings', { method: 'PATCH', body: JSON.stringify({ defaultVatRate, webhookUrl }) });
     setSettingsSaved(true);
     setTimeout(() => setSettingsSaved(false), 2000);
   };
@@ -147,18 +149,29 @@ export default function SettingsPage() {
       {/* App settings */}
       <div className="card" style={{ marginBottom: '1.5rem' }}>
         <h2 style={{ margin: '0 0 1rem', fontSize: '1rem', fontWeight: 700 }}>⚙️ Paramètres de l'application</h2>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <div>
-            <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>TVA par défaut (%)</label>
-            <input type="number" step="0.1" min="0" max="100" value={defaultVatRate} onChange={e => setDefaultVatRate(e.target.value)} style={{ width: '8rem' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div>
+              <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>TVA par défaut (%)</label>
+              <input type="number" step="0.1" min="0" max="100" value={defaultVatRate} onChange={e => setDefaultVatRate(e.target.value)} style={{ width: '8rem' }} />
+            </div>
           </div>
-          <button onClick={saveSettings} className="btn-primary" style={{ fontSize: '0.8125rem' }}>
-            {settingsSaved ? '✓ Sauvegardé' : 'Sauvegarder'}
-          </button>
+          <p style={{ margin: 0, fontSize: '0.75rem', color: '#475569' }}>
+            Note: ce taux s'applique aux nouvelles variantes. Chaque variante peut avoir son propre taux.
+          </p>
+          <div>
+            <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>URL du webhook (nouvelle commande)</label>
+            <input type="url" value={webhookUrl} onChange={e => setWebhookUrl(e.target.value)} placeholder="https://…" style={{ width: '100%', maxWidth: '32rem' }} />
+            <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#475569' }}>
+              Si renseignée, un POST JSON avec les détails de la commande sera envoyé à cette URL à chaque nouvelle commande.
+            </p>
+          </div>
+          <div>
+            <button onClick={saveSettings} className="btn-primary" style={{ fontSize: '0.8125rem' }}>
+              {settingsSaved ? '✓ Sauvegardé' : 'Sauvegarder'}
+            </button>
+          </div>
         </div>
-        <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#475569' }}>
-          Note: ce taux s'applique aux nouvelles variantes. Chaque variante peut avoir son propre taux.
-        </p>
       </div>
 
       {/* Backup & Restore */}

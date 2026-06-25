@@ -98,6 +98,18 @@ export async function POST(req: NextRequest) {
     });
 
     console.log('[orders POST] created order:', order.id);
+
+    // Fire webhook if configured (fire-and-forget)
+    prisma.setting.findUnique({ where: { key: 'webhookUrl' } }).then(setting => {
+      if (setting?.value) {
+        fetch(setting.value, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(order),
+        }).catch(e => console.error('[orders POST] webhook error:', e));
+      }
+    }).catch(e => console.error('[orders POST] webhook setting error:', e));
+
     return NextResponse.json(order, { status: 201 });
   } catch (e) {
     console.error('[orders POST] error:', e);
