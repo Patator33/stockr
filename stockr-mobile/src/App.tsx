@@ -40,6 +40,20 @@ function AppShell({ children }: { children: React.ReactNode }) {
     return () => { handler.then(h => h.remove()); };
   }, [location.pathname, navigate]);
 
+  useEffect(() => {
+    const handler = CapApp.addListener('appUrlOpen', (event) => {
+      // stockr://orders/<id>
+      try {
+        const url = new URL(event.url);
+        if (url.host === 'orders') {
+          const orderId = url.pathname.replace(/^\//, '');
+          if (orderId) navigate('/orders', { state: { orderId } });
+        }
+      } catch { /* URL invalide */ }
+    });
+    return () => { handler.then(h => h.remove()); };
+  }, [navigate]);
+
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
