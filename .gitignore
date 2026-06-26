@@ -16,6 +16,13 @@ stockr-mobile/dist/
 stockr-mobile/android/
 stockr-mobile/ios/
 
+# Except the Android manifest (tracked to allow native customizations)
+!stockr-mobile/android/
+!stockr-mobile/android/app/
+!stockr-mobile/android/app/src/
+!stockr-mobile/android/app/src/main/
+!stockr-mobile/android/app/src/main/AndroidManifest.xml
+
 # Env files
 .env
 .env.local
