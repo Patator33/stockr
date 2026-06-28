@@ -262,6 +262,23 @@ export default function OrdersPage() {
 
           {selected.notes && <p style={{ margin: 0, fontSize: '0.875rem', color: '#94a3b8', background: '#0f1629', padding: '0.5rem 0.75rem', borderRadius: '0.5rem' }}>{selected.notes}</p>}
 
+          {selected.shippingDate && (() => {
+            const d = new Date(selected.shippingDate);
+            const today = new Date(); today.setHours(0,0,0,0);
+            d.setHours(0,0,0,0);
+            const isToday = d.getTime() === today.getTime();
+            const isPast  = d.getTime() < today.getTime();
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: isPast ? 'rgba(239,68,68,0.06)' : isToday ? 'rgba(245,158,11,0.08)' : 'rgba(100,116,139,0.08)', border: `1px solid ${isPast ? 'rgba(239,68,68,0.25)' : isToday ? 'rgba(245,158,11,0.3)' : 'rgba(100,116,139,0.2)'}`, borderRadius: '0.5rem', padding: '0.5rem 0.75rem' }}>
+                <span style={{ fontSize: '0.8125rem', color: isPast ? '#ef4444' : isToday ? '#f59e0b' : '#94a3b8' }}>
+                  📅 Date limite d'expédition : <strong>{new Date(selected.shippingDate).toLocaleDateString('fr-FR')}</strong>
+                  {isToday && <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem' }}>(aujourd'hui)</span>}
+                  {isPast  && <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem' }}>(dépassée)</span>}
+                </span>
+              </div>
+            );
+          })()}
+
           {selected.trackingRef && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem' }}>
               <span style={{ fontSize: '0.8125rem', color: '#22c55e', flex: 1 }}>📦 Suivi : <strong>{selected.trackingRef}</strong></span>

@@ -33,8 +33,9 @@ export default function SettingsPage() {
   const [userLoading, setUserLoading] = useState(false);
 
   // App settings
-  const [defaultVatRate, setDefaultVatRate] = useState('20');
-  const [webhookUrl,     setWebhookUrl]     = useState('');
+  const [defaultVatRate,             setDefaultVatRate]             = useState('20');
+  const [webhookUrl,                 setWebhookUrl]                 = useState('');
+  const [shippingReminderWebhookUrl, setShippingReminderWebhookUrl] = useState('');
   const [settingsSaved, setSettingsSaved]   = useState(false);
 
   // Backup/restore
@@ -52,8 +53,9 @@ export default function SettingsPage() {
 
   useEffect(() => {
     wGet<Record<string, string>>('/api/settings').then(s => {
-      if (s.defaultVatRate) setDefaultVatRate(s.defaultVatRate);
-      if (s.webhookUrl)     setWebhookUrl(s.webhookUrl);
+      if (s.defaultVatRate)             setDefaultVatRate(s.defaultVatRate);
+      if (s.webhookUrl)                 setWebhookUrl(s.webhookUrl);
+      if (s.shippingReminderWebhookUrl) setShippingReminderWebhookUrl(s.shippingReminderWebhookUrl);
     }).catch(() => {});
     if (!isAdmin) return;
     wGet<UserProfile[]>('/api/users').then(setUsers).catch(() => {});
@@ -61,7 +63,7 @@ export default function SettingsPage() {
   }, [isAdmin]);
 
   const saveSettings = async () => {
-    await wFetch('/api/settings', { method: 'PATCH', body: JSON.stringify({ defaultVatRate, webhookUrl }) });
+    await wFetch('/api/settings', { method: 'PATCH', body: JSON.stringify({ defaultVatRate, webhookUrl, shippingReminderWebhookUrl }) });
     setSettingsSaved(true);
     setTimeout(() => setSettingsSaved(false), 2000);
   };
@@ -164,6 +166,13 @@ export default function SettingsPage() {
             <input type="url" value={webhookUrl} onChange={e => setWebhookUrl(e.target.value)} placeholder="https://…" style={{ width: '100%', maxWidth: '32rem' }} />
             <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#475569' }}>
               Si renseignée, un POST JSON avec les détails de la commande sera envoyé à cette URL à chaque nouvelle commande.
+            </p>
+          </div>
+          <div>
+            <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>URL du webhook (relance expédition)</label>
+            <input type="url" value={shippingReminderWebhookUrl} onChange={e => setShippingReminderWebhookUrl(e.target.value)} placeholder="https://…" style={{ width: '100%', maxWidth: '32rem' }} />
+            <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#475569' }}>
+              Si renseignée, un POST JSON sera envoyé à 16h pour chaque commande non expédiée dont la date limite d'expédition est aujourd'hui.
             </p>
           </div>
           <div>
