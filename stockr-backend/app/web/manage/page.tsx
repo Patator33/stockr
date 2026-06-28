@@ -489,7 +489,7 @@ function StockTab() {
   const [stock,     setStock]     = useState<StockByLoc[]>([]);
   const [variants,  setVariants]  = useState<Variant[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
-  const [form, setForm] = useState({ variantId:'', locationId:'', quantity:1, mode:'add' as 'add'|'remove'|'set' });
+  const [form, setForm] = useState({ variantId:'', locationId:'', fromLocationId:'', toLocationId:'', quantity:1, mode:'add' as 'add'|'remove'|'set'|'transfer' });
   const [msg,  setMsg]  = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -507,27 +507,33 @@ function StockTab() {
 
   const adjust = async (e: React.FormEvent) => {
     e.preventDefault(); setMsg('');
-    const qty = form.mode === 'remove' ? -Math.abs(form.quantity) : form.quantity;
-    const apiMode = form.mode === 'set' ? 'set' : 'add';
-    const res = await wFetch('/api/stocks/adjust', { method:'POST', body:JSON.stringify({ variantId:form.variantId, locationId:form.locationId, quantity:qty, mode:apiMode }) });
-    if (!res.ok) { const d=await res.json(); setMsg(d.error||'Erreur'); return; }
-    setMsg(`✓ Stock ${form.mode === 'add' ? 'ajouté' : form.mode === 'remove' ? 'retiré' : 'défini'}`);
+    if (form.mode === 'transfer') {
+      const res = await wFetch('/api/stocks/transfer', { method:'POST', body:JSON.stringify({ variantId:form.variantId, fromLocationId:form.fromLocationId, toLocationId:form.toLocationId, quantity:form.quantity }) });
+      if (!res.ok) { const d=await res.json(); setMsg(d.error||'Erreur'); return; }
+      setMsg('✓ Stock déplacé');
+    } else {
+      const qty = form.mode === 'remove' ? -Math.abs(form.quantity) : form.quantity;
+      const apiMode = form.mode === 'set' ? 'set' : 'add';
+      const res = await wFetch('/api/stocks/adjust', { method:'POST', body:JSON.stringify({ variantId:form.variantId, locationId:form.locationId, quantity:qty, mode:apiMode }) });
+      if (!res.ok) { const d=await res.json(); setMsg(d.error||'Erreur'); return; }
+      setMsg(`✓ Stock ${form.mode === 'add' ? 'ajouté' : form.mode === 'remove' ? 'retiré' : 'défini'}`);
+    }
     load();
   };
 
-  const modeLabel = { add:'Ajouter', remove:'Retirer', set:'Définir' };
-  const modeColor = { add:'#22c55e', remove:'#ef4444', set:'#3b82f6' };
+  const modeLabel = { add:'Ajouter', remove:'Retirer', set:'Définir', transfer:'Déplacer' };
+  const modeColor = { add:'#22c55e', remove:'#ef4444', set:'#3b82f6', transfer:'#a855f7' };
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:'1.5rem' }}>
       <div className="card">
         <h2 style={{ margin:'0 0 1rem', fontSize:'1rem', fontWeight:700 }}>Ajustement de stock</h2>
-        <form onSubmit={adjust} style={{ display:'grid', gridTemplateColumns:'auto 1fr 1fr auto auto', gap:'0.75rem', alignItems:'end' }}>
+        <form onSubmit={adjust} style={{ display:'flex', flexDirection:'column', gap:'0.75rem' }}>
           {/* Mode selector */}
           <div>
             <label style={{ fontSize:'0.75rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Opération</label>
-            <div style={{ display:'flex', gap:'0.25rem' }}>
-              {(['add','remove','set'] as const).map(m => (
+            <div style={{ display:'flex', gap:'0.25rem', flexWrap:'wrap' }}>
+              {(['add','remove','set','transfer'] as const).map(m => (
                 <button key={m} type="button" onClick={() => setForm(f=>({...f,mode:m}))}
                   style={{ padding:'0.5rem 0.75rem', borderRadius:'0.375rem', border:`1px solid ${form.mode===m ? modeColor[m] : '#2a3045'}`, background:form.mode===m ? `${modeColor[m]}20` : 'none', color:form.mode===m ? modeColor[m] : '#64748b', fontSize:'0.8125rem', fontWeight:form.mode===m?600:400 }}>
                   {modeLabel[m]}
@@ -535,6 +541,7 @@ function StockTab() {
               ))}
             </div>
           </div>
+          <div style={{ display:'grid', gridTemplateColumns: form.mode === 'transfer' ? 'auto 1fr 1fr auto' : 'auto 1fr 1fr auto auto', gap:'0.75rem', alignItems:'end', flexWrap:'wrap' }}>
           <div>
             <label style={{ fontSize:'0.75rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Variante</label>
             <select value={form.variantId} onChange={e => setForm(f=>({...f,variantId:e.target.value}))} required>
@@ -542,20 +549,40 @@ function StockTab() {
               {variants.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
             </select>
           </div>
-          <div>
-            <label style={{ fontSize:'0.75rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Zone</label>
-            <select value={form.locationId} onChange={e => setForm(f=>({...f,locationId:e.target.value}))} required>
-              <option value="">— Sélectionner —</option>
-              {locations.map(l => <option key={l.id} value={l.id}>{l.isDefault?'★ ':''}{l.name}</option>)}
-            </select>
-          </div>
+          {form.mode === 'transfer' ? (
+            <>
+              <div>
+                <label style={{ fontSize:'0.75rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Zone source</label>
+                <select value={form.fromLocationId} onChange={e => setForm(f=>({...f,fromLocationId:e.target.value}))} required>
+                  <option value="">— Sélectionner —</option>
+                  {locations.map(l => <option key={l.id} value={l.id}>{l.isDefault?'★ ':''}{l.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize:'0.75rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Zone destination</label>
+                <select value={form.toLocationId} onChange={e => setForm(f=>({...f,toLocationId:e.target.value}))} required>
+                  <option value="">— Sélectionner —</option>
+                  {locations.filter(l => l.id !== form.fromLocationId).map(l => <option key={l.id} value={l.id}>{l.isDefault?'★ ':''}{l.name}</option>)}
+                </select>
+              </div>
+            </>
+          ) : (
+            <div>
+              <label style={{ fontSize:'0.75rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Zone</label>
+              <select value={form.locationId} onChange={e => setForm(f=>({...f,locationId:e.target.value}))} required>
+                <option value="">— Sélectionner —</option>
+                {locations.map(l => <option key={l.id} value={l.id}>{l.isDefault?'★ ':''}{l.name}</option>)}
+              </select>
+            </div>
+          )}
           <div>
             <label style={{ fontSize:'0.75rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Quantité</label>
-            <input type="number" min={0} step={1} value={form.quantity} onChange={e => setForm(f=>({...f,quantity:Number(e.target.value)}))} required style={{ width:'6rem' }} />
+            <input type="number" min={1} step={1} value={form.quantity} onChange={e => setForm(f=>({...f,quantity:Number(e.target.value)}))} required style={{ width:'6rem' }} />
           </div>
           <button type="submit" className="btn-primary" style={{ background:modeColor[form.mode] }}>
             {modeLabel[form.mode]}
           </button>
+          </div>
         </form>
         {msg && <p style={{ marginTop:'0.5rem', fontSize:'0.875rem', color:msg.startsWith('✓')?'#22c55e':'#ef4444' }}>{msg}</p>}
       </div>
