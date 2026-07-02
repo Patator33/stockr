@@ -533,7 +533,7 @@ function StockTab() {
           <div>
             <label style={{ fontSize:'0.75rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Opération</label>
             <div style={{ display:'flex', gap:'0.25rem', flexWrap:'wrap' }}>
-              {(['add','remove','set','transfer'] as const).map(m => (
+              {(['add','transfer','set','remove'] as const).map(m => (
                 <button key={m} type="button" onClick={() => setForm(f=>({...f,mode:m}))}
                   style={{ padding:'0.5rem 0.75rem', borderRadius:'0.375rem', border:`1px solid ${form.mode===m ? modeColor[m] : '#2a3045'}`, background:form.mode===m ? `${modeColor[m]}20` : 'none', color:form.mode===m ? modeColor[m] : '#64748b', fontSize:'0.8125rem', fontWeight:form.mode===m?600:400 }}>
                   {modeLabel[m]}

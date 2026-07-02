@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
         if (!variantId && item.barcode) {
           console.log('[orders POST] resolving by barcode:', item.barcode);
           const v = await prisma.productVariant.findUnique({ where: { barcode: item.barcode }, include: { product: true } });
-          if (v) { variantId = v.id; resolvedName = item.variantName || v.name; }
+          if (v) { variantId = v.id; resolvedName = v.name; }
           else console.warn('[orders POST] no variant found for barcode:', item.barcode);
         }
         return {
