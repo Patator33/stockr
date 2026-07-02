@@ -257,7 +257,21 @@ export default function Orders() {
             </button>
           )}
 
-          {selectedOrder.status === 'prepared' && (
+          {selectedOrder.status === 'confirmed' && (
+            <button
+              onClick={async () => {
+                await api.orders.updateStatus(selectedOrder.id, 'prepared');
+                const updated = await api.orders.get(selectedOrder.id);
+                setSelectedOrder(updated);
+                await reload();
+              }}
+              style={{ padding: '0.875rem', background: 'rgba(129,140,248,0.12)', border: '1px solid rgba(129,140,248,0.3)', borderRadius: '0.75rem', color: '#818cf8', fontSize: '1rem', fontWeight: 700, cursor: 'pointer' }}
+            >
+              ✓ Marquer préparée
+            </button>
+          )}
+
+          {(selectedOrder.status === 'prepared' || selectedOrder.status === 'confirmed') && (
             <button
               onClick={async () => {
                 setScanError('');

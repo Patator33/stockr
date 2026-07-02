@@ -22,6 +22,7 @@ export default function OrdersPage() {
   const [loading,   setLoading]   = useState(true);
   const [barcode,   setBarcode]   = useState('');
   const [barcodeMsg, setBarcodeMsg] = useState('');
+  const [trackingInput, setTrackingInput] = useState('');
 
   // New order creation state
   const [showCreate, setShowCreate] = useState(false);
@@ -69,9 +70,15 @@ export default function OrdersPage() {
     filter === 'shipped' ? o.status === 'shipped' : true
   );
 
-  const updateStatus = async (id: string, status: string) => {
-    await wFetch(`/api/orders/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+  const updateStatus = async (id: string, status: string, trackingRef?: string) => {
+    await wFetch(`/api/orders/${id}`, { method: 'PATCH', body: JSON.stringify({ status, ...(trackingRef ? { trackingRef } : {}) }) });
     await refresh();
+  };
+
+  const markShipped = async () => {
+    if (!selected) return;
+    await updateStatus(selected.id, 'shipped', trackingInput.trim() || undefined);
+    setTrackingInput('');
   };
 
   const updateLocation = async (id: string, locationId: string) => {
@@ -323,18 +330,31 @@ export default function OrdersPage() {
 
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             {selected.status === 'pending' && (
-              <button onClick={() => updateStatus(selected.id, 'prepared')} className="btn-primary">Marquer préparée</button>
+              <button onClick={() => updateStatus(selected.id, 'confirmed')} className="btn-primary">Confirmer</button>
             )}
-            {selected.status === 'prepared' && (
-              <button onClick={() => updateStatus(selected.id, 'shipped')}
-                style={{ background: '#14532d', color: '#86efac', border: '1px solid #166534', borderRadius: '0.5rem', padding: '0.625rem 1rem', fontWeight: 600, fontSize: '0.875rem' }}>
-                📦 Marquer expédiée
+            {(selected.status === 'pending' || selected.status === 'confirmed') && (
+              <button onClick={() => updateStatus(selected.id, 'prepared')}
+                style={{ background: 'rgba(129,140,248,0.12)', color: '#818cf8', border: '1px solid rgba(129,140,248,0.3)', borderRadius: '0.5rem', padding: '0.625rem 1rem', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer' }}>
+                Marquer préparée
               </button>
             )}
             {selected.status === 'shipped' && (
               <button onClick={() => updateStatus(selected.id, 'pending')} className="btn-ghost" style={{ fontSize: '0.8125rem' }}>Réouvrir</button>
             )}
           </div>
+
+          {(selected.status === 'pending' || selected.status === 'confirmed' || selected.status === 'prepared') && (
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', background: 'rgba(34,197,94,0.04)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '0.5rem', padding: '0.75rem' }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>N° de suivi (optionnel)</label>
+                <input value={trackingInput} onChange={e => setTrackingInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') markShipped(); }} placeholder="Ex : 1Z999AA10123456784" />
+              </div>
+              <button onClick={markShipped}
+                style={{ background: '#14532d', color: '#86efac', border: '1px solid #166534', borderRadius: '0.5rem', padding: '0.625rem 1rem', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                📦 Marquer expédiée
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="card" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
