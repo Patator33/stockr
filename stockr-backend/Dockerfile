@@ -22,7 +22,7 @@ RUN npm run build
 # Production image
 FROM base AS runner
 WORKDIR /app
-RUN apk add --no-cache curl dos2unix openssl
+RUN apk add --no-cache curl dos2unix openssl samba-client
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 

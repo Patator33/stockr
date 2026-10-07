@@ -38,6 +38,13 @@ export default function SettingsPage() {
   const [shippingReminderWebhookUrl, setShippingReminderWebhookUrl] = useState('');
   const [settingsSaved, setSettingsSaved]   = useState(false);
 
+  // Sauvegarde automatique SMB
+  const emptySmb = { enabled: false, frequency: 'daily', retention: '30', host: '', share: '', folder: '', username: '', password: '', domain: '', passwordSet: false, lastRun: '', lastStatus: '', lastError: '' };
+  const [smb, setSmb] = useState(emptySmb);
+  const [smbOpen, setSmbOpen] = useState(true);
+  const [smbBusy, setSmbBusy] = useState('');
+  const [smbMsg, setSmbMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
   // Backup/restore
   const [backupMsg,  setBackupMsg]  = useState('');
   const [restoring,  setRestoring]  = useState(false);
@@ -56,6 +63,13 @@ export default function SettingsPage() {
       if (s.defaultVatRate)             setDefaultVatRate(s.defaultVatRate);
       if (s.webhookUrl)                 setWebhookUrl(s.webhookUrl);
       if (s.shippingReminderWebhookUrl) setShippingReminderWebhookUrl(s.shippingReminderWebhookUrl);
+      setSmb({
+        enabled: s.backup_enabled === 'true', frequency: s.backup_frequency || 'daily', retention: s.backup_retention || '30',
+        host: s.backup_smb_host || '', share: s.backup_smb_share || '', folder: s.backup_smb_folder || '',
+        username: s.backup_smb_username || '', password: '', domain: s.backup_smb_domain || '',
+        passwordSet: s.backup_smb_password_set === 'true',
+        lastRun: s.backup_last_run || '', lastStatus: s.backup_last_status || '', lastError: s.backup_last_error || '',
+      });
     }).catch(() => {});
     if (!isAdmin) return;
     wGet<UserProfile[]>('/api/users').then(setUsers).catch(() => {});
@@ -66,6 +80,44 @@ export default function SettingsPage() {
     await wFetch('/api/settings', { method: 'PATCH', body: JSON.stringify({ defaultVatRate, webhookUrl, shippingReminderWebhookUrl }) });
     setSettingsSaved(true);
     setTimeout(() => setSettingsSaved(false), 2000);
+  };
+
+  const smbPayload = () => ({
+    backup_enabled: String(smb.enabled), backup_frequency: smb.frequency, backup_retention: smb.retention,
+    backup_smb_host: smb.host.trim(), backup_smb_share: smb.share.trim(), backup_smb_folder: smb.folder.trim(),
+    backup_smb_username: smb.username.trim(), backup_smb_password: smb.password, backup_smb_domain: smb.domain.trim(),
+  });
+
+  const refreshSmbStatus = () =>
+    wGet<Record<string, string>>('/api/settings').then(s =>
+      setSmb(p => ({ ...p, passwordSet: s.backup_smb_password_set === 'true', lastRun: s.backup_last_run || '', lastStatus: s.backup_last_status || '', lastError: s.backup_last_error || '' }))
+    ).catch(() => {});
+
+  const saveSmb = async (): Promise<boolean> => {
+    const res = await wFetch('/api/settings', { method: 'PATCH', body: JSON.stringify(smbPayload()) });
+    if (!res.ok) { const d = await res.json().catch(() => ({})); setSmbMsg({ ok: false, text: d.error || 'Erreur' }); return false; }
+    setSmb(p => ({ ...p, password: '', passwordSet: p.passwordSet || !!p.password }));
+    return true;
+  };
+
+  const smbAction = async (kind: 'save' | 'test' | 'run') => {
+    setSmbBusy(kind); setSmbMsg(null);
+    try {
+      if (kind === 'save') {
+        if (await saveSmb()) setSmbMsg({ ok: true, text: 'Paramètres enregistrés.' });
+      } else if (kind === 'test') {
+        const res = await wFetch('/api/backup/smb', { method: 'POST', body: JSON.stringify({ action: 'test', host: smb.host.trim(), share: smb.share.trim(), folder: smb.folder.trim(), username: smb.username.trim(), password: smb.password, domain: smb.domain.trim() }) });
+        const d = await res.json();
+        setSmbMsg({ ok: !!d.success, text: d.success ? 'Connexion réussie.' : (d.error || 'Échec de la connexion') });
+      } else {
+        if (!(await saveSmb())) return;
+        const res = await wFetch('/api/backup/smb', { method: 'POST', body: JSON.stringify({ action: 'run' }) });
+        const d = await res.json();
+        setSmbMsg({ ok: !!d.success, text: d.success ? 'Sauvegarde envoyée.' : (d.error || 'Échec de la sauvegarde') });
+        await refreshSmbStatus();
+      }
+    } catch (err) { setSmbMsg({ ok: false, text: err instanceof Error ? err.message : 'Erreur' }); }
+    finally { setSmbBusy(''); }
   };
 
   const createUser = async (e: React.FormEvent) => {
@@ -204,6 +256,75 @@ export default function SettingsPage() {
           Sauvegarde = fichier SQLite complet. Restaurer remplace toute la base — opération irréversible.
         </p>
       </div>
+
+      {isAdmin && (
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+            <div onClick={() => setSmbOpen(o => !o)} style={{ cursor: 'pointer', flex: 1 }}>
+              <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>{smbOpen ? '▾' : '▸'} 💾 Sauvegarde automatique</h2>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#64748b' }}>Copie périodique de la base vers un partage réseau (SMB/Samba)</p>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8125rem', cursor: 'pointer' }}>
+              <input type="checkbox" checked={smb.enabled} onChange={e => setSmb(p => ({ ...p, enabled: e.target.checked }))} style={{ width: 'auto' }} />
+              {smb.enabled ? 'Activée' : 'Désactivée'}
+            </label>
+          </div>
+          {smbOpen && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1rem' }}>
+              <p style={{ margin: 0, fontSize: '0.75rem', color: '#475569' }}>Seul le protocole SMB/Samba est pris en charge. Un snapshot cohérent de la base est envoyé ; les plus anciens sont purgés.</p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Fréquence</label>
+                  <select value={smb.frequency} onChange={e => setSmb(p => ({ ...p, frequency: e.target.value }))}>
+                    <option value="daily">Quotidienne</option>
+                    <option value="weekly">Hebdomadaire</option>
+                    <option value="monthly">Mensuelle</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Sauvegardes conservées avant purge</label>
+                  <input type="number" min={1} value={smb.retention} onChange={e => setSmb(p => ({ ...p, retention: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Serveur (IP ou nom d'hôte)</label>
+                  <input value={smb.host} onChange={e => setSmb(p => ({ ...p, host: e.target.value }))} placeholder="192.168.1.10" />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Partage</label>
+                  <input value={smb.share} onChange={e => setSmb(p => ({ ...p, share: e.target.value }))} placeholder="sauvegardes" />
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Sous-dossier (facultatif)</label>
+                  <input value={smb.folder} onChange={e => setSmb(p => ({ ...p, folder: e.target.value }))} placeholder="stockr" />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Utilisateur</label>
+                  <input value={smb.username} onChange={e => setSmb(p => ({ ...p, username: e.target.value }))} autoComplete="off" />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Mot de passe</label>
+                  <input type="password" value={smb.password} onChange={e => setSmb(p => ({ ...p, password: e.target.value }))} placeholder={smb.passwordSet ? '•••••• (enregistré)' : ''} autoComplete="new-password" />
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>Domaine (facultatif)</label>
+                  <input value={smb.domain} onChange={e => setSmb(p => ({ ...p, domain: e.target.value }))} placeholder="WORKGROUP" />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button onClick={() => smbAction('save')} className="btn-primary" disabled={!!smbBusy} style={{ fontSize: '0.8125rem' }}>{smbBusy === 'save' ? '…' : '💾 Enregistrer'}</button>
+                <button onClick={() => smbAction('test')} className="btn-ghost" disabled={!!smbBusy} style={{ fontSize: '0.8125rem' }}>{smbBusy === 'test' ? '…' : '📍 Tester la connexion'}</button>
+                <button onClick={() => smbAction('run')} className="btn-ghost" disabled={!!smbBusy} style={{ fontSize: '0.8125rem' }}>{smbBusy === 'run' ? '…' : '⬆ Sauvegarder maintenant'}</button>
+              </div>
+              {smbMsg && <p style={{ margin: 0, fontSize: '0.8125rem', color: smbMsg.ok ? '#22c55e' : '#ef4444' }}>{smbMsg.text}</p>}
+              {smb.lastRun && (
+                <p style={{ margin: 0, fontSize: '0.75rem', color: smb.lastStatus === 'error' ? '#ef4444' : '#64748b' }}>
+                  Dernière sauvegarde : {new Date(smb.lastRun).toLocaleString('fr-FR')} — {smb.lastStatus === 'ok' ? 'réussie' : `échec${smb.lastError ? ` (${smb.lastError})` : ''}`}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {isAdmin && (
         <div className="card" style={{ marginBottom: '1.5rem' }}>
