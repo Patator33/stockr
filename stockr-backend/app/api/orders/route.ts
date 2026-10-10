@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
   const { customerName, customerEmail, notes, source, shippingDate, items } = body as {
     customerName?: string; customerEmail?: string; notes?: string; source?: string;
     shippingDate?: string;
-    items?: { barcode?: string; supplierRef?: string; variantName?: string; quantity: number }[];
+    items?: { variantId?: string; barcode?: string; supplierRef?: string; variantName?: string; quantity: number }[];
   };
 
   if (!items || !Array.isArray(items) || items.length === 0) {
@@ -51,7 +51,11 @@ export async function POST(req: NextRequest) {
       items.map(async (item) => {
         let variantId: string | null = null;
         let resolvedName = item.variantName || item.supplierRef || item.barcode || 'Article';
-        if (item.supplierRef) {
+        if (item.variantId) {
+          const v = await prisma.productVariant.findUnique({ where: { id: item.variantId } });
+          if (v) { variantId = v.id; resolvedName = v.name; }
+        }
+        if (!variantId && item.supplierRef) {
           console.log('[orders POST] resolving by supplierRef:', item.supplierRef);
           // 1. Try generic variant-level supplierRef
           const v = await prisma.productVariant.findUnique({ where: { supplierRef: item.supplierRef }, include: { product: true } });

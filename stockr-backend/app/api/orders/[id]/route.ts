@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { logAction } from '@/lib/audit';
+import { reverseOrderShipment } from '@/lib/orderShipment';
 
 async function auth(req: NextRequest): Promise<{ ok: false } | { ok: true; userId: string; userEmail: string }> {
   try {
@@ -46,8 +47,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (body.shippingDate !== undefined) data.shippingDate = body.shippingDate ? new Date(body.shippingDate) : null;
     if (body.trackingRef !== undefined) data.trackingRef = body.trackingRef || null;
 
-    // Destock + create Sales on ship
-    if (body.status === 'shipped') {
+    const current = body.status !== undefined
+      ? await prisma.order.findUnique({ where: { id }, select: { status: true } })
+      : null;
+    if (body.status !== undefined && !current) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    // Sortie du statut "expédiée" (réouverture, annulation) : annule ventes + remet en stock
+    if (current?.status === 'shipped' && body.status !== 'shipped') {
+      await reverseOrderShipment(id, session.userId);
+    }
+
+    // Destock + create Sales on ship (une seule fois : pas de doublon si déjà expédiée)
+    if (body.status === 'shipped' && current?.status !== 'shipped') {
       const order = await prisma.order.findUnique({
         where: { id },
         include: { items: { include: { variant: { include: { promotions: true } } } } },
@@ -117,6 +128,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const session = await auth(req);
   if (!session.ok) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const { id } = await params;
+  const existing = await prisma.order.findUnique({ where: { id }, select: { status: true } });
+  if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  if (existing.status === 'shipped') await reverseOrderShipment(id, session.userId);
   await prisma.order.delete({ where: { id } });
   await logAction(session.userId, session.userEmail, 'order.delete', `Commande ${id.slice(0, 8)}`);
   return NextResponse.json({ ok: true });

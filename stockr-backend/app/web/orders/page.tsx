@@ -8,8 +8,8 @@ interface Order { id: string; status: string; customerName?: string | null; cust
 interface Location { id: string; name: string; isDefault?: boolean; }
 interface Variant { id: string; name: string; barcode?: string | null; supplierRef?: string | null; }
 
-const STATUS_LABELS: Record<string, string> = { pending: 'En attente', confirmed: 'Confirmée', prepared: 'Préparée', shipped: 'Expédiée' };
-const STATUS_COLORS: Record<string, string> = { pending: 'badge-pending', confirmed: 'badge-confirmed', prepared: 'badge-prepared', shipped: 'badge-shipped' };
+const STATUS_LABELS: Record<string, string> = { pending: 'En attente', confirmed: 'Confirmée', prepared: 'Préparée', shipped: 'Expédiée', cancelled: 'Annulée' };
+const STATUS_COLORS: Record<string, string> = { pending: 'badge-pending', confirmed: 'badge-confirmed', prepared: 'badge-prepared', shipped: 'badge-shipped', cancelled: 'badge-cancelled' };
 
 interface NewOrderItem { variantId: string; variantName: string; quantity: number; }
 
@@ -87,7 +87,8 @@ export default function OrdersPage() {
   };
 
   const deleteOrder = async (id: string) => {
-    if (!confirm('Supprimer cette commande ?')) return;
+    const shipped = orders.find(o => o.id === id)?.status === 'shipped';
+    if (!confirm(shipped ? 'Supprimer cette commande expédiée ? Les ventes seront annulées et le stock remis.' : 'Supprimer cette commande ?')) return;
     await wFetch(`/api/orders/${id}`, { method: 'DELETE' });
     setSelected(null);
     await refresh();
@@ -338,8 +339,23 @@ export default function OrdersPage() {
                 Marquer préparée
               </button>
             )}
-            {selected.status === 'shipped' && (
-              <button onClick={() => updateStatus(selected.id, 'pending')} className="btn-ghost" style={{ fontSize: '0.8125rem' }}>Réouvrir</button>
+            {(selected.status === 'shipped' || selected.status === 'cancelled') && (
+              <button
+                onClick={() => {
+                  if (selected.status === 'shipped' && !confirm('Rouvrir cette commande ? Les ventes seront annulées et le stock remis.')) return;
+                  updateStatus(selected.id, 'pending');
+                }}
+                className="btn-ghost" style={{ fontSize: '0.8125rem' }}>Réouvrir</button>
+            )}
+            {selected.status !== 'cancelled' && (
+              <button
+                onClick={() => {
+                  const msg = selected.status === 'shipped'
+                    ? 'Annuler cette commande expédiée ? Les ventes seront retirées des stats et le stock remis en place.'
+                    : 'Annuler cette commande ?';
+                  if (confirm(msg)) updateStatus(selected.id, 'cancelled');
+                }}
+                className="btn-danger" style={{ fontSize: '0.8125rem' }}>Annuler la commande</button>
             )}
           </div>
 

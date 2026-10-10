@@ -171,6 +171,8 @@ export const api = {
     updateLocation: (orderId: string, locationId: string) =>
       patch<Order>(`/api/orders/${orderId}`, { locationId }),
     delete: (id: string) => del(`/api/orders/${id}`),
+    create: (data: { customerName?: string; notes?: string; shippingDate?: string | null; source?: string; items: { variantId: string; quantity: number }[] }) =>
+      post<Order>('/api/orders', data),
   },
   stats: {
     get: (productId?: string, period?: number, supplierId?: string) => {

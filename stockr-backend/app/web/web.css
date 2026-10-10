@@ -87,6 +87,7 @@ tr:hover td { background: #1a2035; }
 .badge-pending  { background: #1e3a5f; color: #93c5fd; }
 .badge-prepared { background: #312e81; color: #a5b4fc; }
 .badge-shipped  { background: #14532d; color: #86efac; }
+.badge-cancelled { background: #3f1d1d; color: #fca5a5; }
 .badge-confirmed { background: #1c1917; color: #a8a29e; }
 
 a { color: inherit; text-decoration: none; }

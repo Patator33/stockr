@@ -11,6 +11,7 @@ function statusLabel(s: string) {
   if (s === 'confirmed') return { label: 'Confirmée', color: '#2b8cee' };
   if (s === 'prepared') return { label: 'Préparée', color: '#818cf8' };
   if (s === 'shipped') return { label: 'Expédiée', color: '#22c55e' };
+  if (s === 'cancelled') return { label: 'Annulée', color: '#ef4444' };
   return { label: s, color: '#64748b' };
 }
 
@@ -24,11 +25,52 @@ export default function Orders() {
   const { orders, reload } = useOrders();
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<string | null>(null);
+  const [reopenTarget, setReopenTarget] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState('');
   const [scanSuccess, setScanSuccess] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [trackingInput, setTrackingInput] = useState('');
+
+  // Création manuelle
+  const [creating, setCreating] = useState(false);
+  const [variants, setVariants] = useState<import('../api').Variant[]>([]);
+  const [newOrder, setNewOrder] = useState({ customerName: '', notes: '', shippingDate: '' });
+  const [newItems, setNewItems] = useState<{ variantId: string; quantity: number }[]>([{ variantId: '', quantity: 1 }]);
+  const [createError, setCreateError] = useState('');
+  const [createBusy, setCreateBusy] = useState(false);
+
+  const openCreate = () => {
+    setCreateError('');
+    setNewOrder({ customerName: '', notes: '', shippingDate: '' });
+    setNewItems([{ variantId: '', quantity: 1 }]);
+    setCreating(true);
+    if (variants.length === 0) api.variants.list().then(setVariants).catch(() => setCreateError('Impossible de charger les variantes'));
+  };
+
+  const handleCreate = async () => {
+    const items = newItems.filter(i => i.variantId && i.quantity > 0);
+    if (items.length === 0) { setCreateError('Ajoutez au moins un article'); return; }
+    setCreateBusy(true); setCreateError('');
+    try {
+      const created = await api.orders.create({
+        customerName: newOrder.customerName.trim() || undefined,
+        notes: newOrder.notes.trim() || undefined,
+        shippingDate: newOrder.shippingDate || null,
+        source: 'mobile',
+        items,
+      });
+      await reload();
+      setCreating(false);
+      setScanError(''); setScanSuccess(''); setTrackingInput('');
+      setSelectedOrder(await api.orders.get(created.id).catch(() => created));
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCreateBusy(false);
+    }
+  };
   const [locations, setLocations] = useState<import('../api').Location[]>([]);
 
   // Load locations once
@@ -36,7 +78,7 @@ export default function Orders() {
 
   // Auto-set default location on order if not set
   useEffect(() => {
-    if (!selectedOrder || selectedOrder.locationId || selectedOrder.status === 'shipped' || locations.length === 0) return;
+    if (!selectedOrder || selectedOrder.locationId || selectedOrder.status === 'shipped' || selectedOrder.status === 'cancelled' || locations.length === 0) return;
     const defaultLoc = locations.find(l => l.isDefault);
     if (!defaultLoc) return;
     api.orders.updateLocation(selectedOrder.id, defaultLoc.id)
@@ -112,7 +154,7 @@ export default function Orders() {
 
       // Auto-set to "prepared" if all items fully scanned
       const allDone = updated.items.every(i => i.scanned >= i.quantity);
-      if (allDone && updated.status !== 'prepared' && updated.status !== 'shipped') {
+      if (allDone && updated.status !== 'prepared' && updated.status !== 'shipped' && updated.status !== 'cancelled') {
         await api.orders.updateStatus(updated.id, 'prepared');
         const prepared = await api.orders.get(updated.id);
         setSelectedOrder(prepared);
@@ -125,6 +167,18 @@ export default function Orders() {
     }
   };
 
+  const changeStatus = async (id: string, status: string) => {
+    setCancelTarget(null);
+    setReopenTarget(null);
+    try {
+      await api.orders.updateStatus(id, status);
+      setSelectedOrder(await api.orders.get(id));
+      await reload();
+    } catch (e) {
+      setScanError(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
   const handleMarkConfirmed = async (order: Order) => {
     await api.orders.updateStatus(order.id, 'confirmed');
     const updated = await api.orders.get(order.id);
@@ -133,6 +187,69 @@ export default function Orders() {
   };
 
   const filtered = statusFilter ? orders.filter(o => o.status === statusFilter) : orders;
+
+  // --- Manual creation view ---
+  if (creating) {
+    const labelStyle = { fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '0.25rem' } as const;
+    return (
+      <div className="pb-nav safe-top" style={{ padding: '1rem', height: '100%', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+          <button onClick={() => setCreating(false)} style={{ background: 'none', border: 'none', color: '#2b8cee', fontSize: '1.25rem', cursor: 'pointer', padding: '0.25rem' }}>‹</button>
+          <h1 style={{ fontSize: '1.125rem', fontWeight: 800, color: '#e2e8f0', margin: 0 }}>Nouvelle commande</h1>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div>
+            <label style={labelStyle}>Client (facultatif)</label>
+            <input value={newOrder.customerName} onChange={e => setNewOrder(p => ({ ...p, customerName: e.target.value }))} placeholder="Nom du client" />
+          </div>
+          <div>
+            <label style={labelStyle}>Date limite d'expédition (facultatif)</label>
+            <input type="date" value={newOrder.shippingDate} onChange={e => setNewOrder(p => ({ ...p, shippingDate: e.target.value }))} />
+          </div>
+          <div>
+            <label style={labelStyle}>Notes (facultatif)</label>
+            <input value={newOrder.notes} onChange={e => setNewOrder(p => ({ ...p, notes: e.target.value }))} placeholder="Notes…" />
+          </div>
+
+          <h2 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#e2e8f0', margin: '0.5rem 0 0' }}>Articles</h2>
+          {newItems.map((it, idx) => (
+            <div key={idx} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <select
+                value={it.variantId}
+                onChange={e => setNewItems(p => p.map((x, i) => i === idx ? { ...x, variantId: e.target.value } : x))}
+                style={{ flex: 1, margin: 0, minWidth: 0 }}
+              >
+                <option value="">— Variante —</option>
+                {variants.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+              </select>
+              <input
+                type="number" min={1} inputMode="numeric" value={it.quantity}
+                onChange={e => setNewItems(p => p.map((x, i) => i === idx ? { ...x, quantity: Math.max(1, Number(e.target.value) || 1) } : x))}
+                style={{ width: '4rem', margin: 0 }}
+              />
+              {newItems.length > 1 && (
+                <button onClick={() => setNewItems(p => p.filter((_, i) => i !== idx))}
+                  style={{ background: 'none', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '0.5rem', color: '#ef4444', padding: '0.5rem 0.625rem', cursor: 'pointer' }}>✕</button>
+              )}
+            </div>
+          ))}
+          <button onClick={() => setNewItems(p => [...p, { variantId: '', quantity: 1 }])}
+            style={{ background: 'none', border: '1px dashed #2a3045', borderRadius: '0.75rem', color: '#2b8cee', padding: '0.625rem', fontSize: '0.875rem', cursor: 'pointer' }}>
+            + Ajouter un article
+          </button>
+
+          {createError && (
+            <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.75rem', padding: '0.75rem 1rem', color: '#ef4444', fontSize: '0.875rem' }}>{createError}</div>
+          )}
+
+          <button onClick={handleCreate} disabled={createBusy} className="btn-primary" style={{ marginTop: '0.5rem' }}>
+            {createBusy ? '…' : '✓ Créer la commande'}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // --- Order detail view ---
   if (selectedOrder) {
@@ -186,7 +303,7 @@ export default function Orders() {
         )}
 
         {/* Location picker */}
-        {locations.length > 0 && selectedOrder.status !== 'shipped' && (
+        {locations.length > 0 && selectedOrder.status !== 'shipped' && selectedOrder.status !== 'cancelled' && (
           <div style={{ background: '#141824', border: '1px solid #2a3045', borderRadius: '0.75rem', padding: '0.625rem 0.875rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
             <span style={{ fontSize: '0.8125rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>🏭 Lieu de déstockage</span>
             <select
@@ -239,7 +356,7 @@ export default function Orders() {
 
         {/* Actions */}
         <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          {selectedOrder.status !== 'shipped' && (
+          {selectedOrder.status !== 'shipped' && selectedOrder.status !== 'cancelled' && (
             <button
               onClick={handleScanItem}
               disabled={scanning}
@@ -317,6 +434,24 @@ export default function Orders() {
             </div>
           )}
 
+          {(selectedOrder.status === 'shipped' || selectedOrder.status === 'cancelled') && (
+            <button
+              onClick={() => setReopenTarget(selectedOrder.id)}
+              style={{ padding: '0.75rem', background: 'none', border: '1px solid #2a3045', borderRadius: '0.75rem', color: '#94a3b8', fontSize: '0.9375rem', cursor: 'pointer' }}
+            >
+              ↺ Rouvrir la commande
+            </button>
+          )}
+
+          {selectedOrder.status !== 'cancelled' && (
+            <button
+              onClick={() => setCancelTarget(selectedOrder.id)}
+              style={{ padding: '0.75rem', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: '0.75rem', color: '#f59e0b', fontSize: '0.9375rem', fontWeight: 600, cursor: 'pointer' }}
+            >
+              ✕ Annuler la commande
+            </button>
+          )}
+
           <button
             onClick={() => setDeleteTarget(selectedOrder.id)}
             className="btn-danger"
@@ -327,10 +462,31 @@ export default function Orders() {
 
         {deleteTarget && (
           <ConfirmModal
-            message="Supprimer cette commande ?"
+            message={selectedOrder.status === 'shipped'
+              ? 'Supprimer cette commande expédiée ? Les ventes seront annulées et le stock remis.'
+              : 'Supprimer cette commande ?'}
             onConfirm={handleDelete}
             onCancel={() => setDeleteTarget(null)}
             danger
+          />
+        )}
+        {cancelTarget && (
+          <ConfirmModal
+            message={selectedOrder.status === 'shipped'
+              ? 'Annuler cette commande expédiée ? Les ventes seront retirées des stats et le stock remis en place.'
+              : 'Annuler cette commande ?'}
+            onConfirm={() => changeStatus(cancelTarget, 'cancelled')}
+            onCancel={() => setCancelTarget(null)}
+            danger
+          />
+        )}
+        {reopenTarget && (
+          <ConfirmModal
+            message={selectedOrder.status === 'shipped'
+              ? 'Rouvrir cette commande ? Les ventes seront annulées et le stock remis.'
+              : 'Rouvrir cette commande ?'}
+            onConfirm={() => changeStatus(reopenTarget, 'pending')}
+            onCancel={() => setReopenTarget(null)}
           />
         )}
       </div>
@@ -343,6 +499,10 @@ export default function Orders() {
       <div className="pb-nav safe-top" style={{ padding: '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
           <h1 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#e2e8f0', margin: 0 }}>📋 Commandes</h1>
+          <button onClick={openCreate}
+            style={{ background: 'rgba(43,140,238,0.12)', border: '1px solid rgba(43,140,238,0.4)', borderRadius: '9999px', color: '#2b8cee', fontSize: '0.8125rem', fontWeight: 700, padding: '0.375rem 0.875rem', cursor: 'pointer' }}>
+            + Ajouter
+          </button>
         </div>
 
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ marginBottom: '1rem' }}>
@@ -351,6 +511,7 @@ export default function Orders() {
           <option value="confirmed">Confirmées</option>
           <option value="prepared">Préparées</option>
           <option value="shipped">Expédiées</option>
+          <option value="cancelled">Annulées</option>
         </select>
 
         {filtered.length === 0 && (
