@@ -28,6 +28,7 @@ export default function Orders() {
   const [scanError, setScanError] = useState('');
   const [scanSuccess, setScanSuccess] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [trackingInput, setTrackingInput] = useState('');
   const [locations, setLocations] = useState<import('../api').Location[]>([]);
 
   // Load locations once
@@ -272,23 +273,48 @@ export default function Orders() {
           )}
 
           {(selectedOrder.status === 'prepared' || selectedOrder.status === 'confirmed') && (
-            <button
-              onClick={async () => {
-                setScanError('');
-                let trackingRef: string | null = null;
-                try {
-                  const code = await scanBarcode();
-                  if (code) trackingRef = code;
-                } catch { /* scan annulé */ }
-                await api.orders.updateStatus(selectedOrder.id, 'shipped', trackingRef);
-                const updated = await api.orders.get(selectedOrder.id);
-                setSelectedOrder(updated);
-                await reload();
-              }}
-              style={{ padding: '0.875rem', background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.75rem', color: '#22c55e', fontSize: '1rem', fontWeight: 700, cursor: 'pointer' }}
-            >
-              🚚 Marquer expédiée
-            </button>
+            <div style={{ background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: '0.75rem', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+              <label style={{ fontSize: '0.75rem', color: '#94a3b8' }}>N° de suivi (scanner ou saisir, optionnel)</label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input
+                  value={trackingInput}
+                  onChange={e => setTrackingInput(e.target.value)}
+                  placeholder="Numéro de suivi…"
+                  autoCapitalize="characters"
+                  style={{ flex: 1, margin: 0 }}
+                />
+                <button
+                  onClick={async () => {
+                    setScanError('');
+                    try {
+                      const code = await scanBarcode();
+                      if (code) setTrackingInput(code);
+                    } catch { /* scan annulé */ }
+                  }}
+                  style={{ padding: '0 0.875rem', background: 'rgba(43,140,238,0.12)', border: '1px solid rgba(43,140,238,0.4)', borderRadius: '0.5rem', color: '#2b8cee', fontSize: '1.125rem', cursor: 'pointer' }}
+                  aria-label="Scanner le code-barre de suivi"
+                >
+                  📷
+                </button>
+              </div>
+              <button
+                onClick={async () => {
+                  setScanError('');
+                  try {
+                    await api.orders.updateStatus(selectedOrder.id, 'shipped', trackingInput.trim() || null);
+                    setTrackingInput('');
+                    const updated = await api.orders.get(selectedOrder.id);
+                    setSelectedOrder(updated);
+                    await reload();
+                  } catch (e) {
+                    setScanError(`Erreur : ${e instanceof Error ? e.message : String(e)}`);
+                  }
+                }}
+                style={{ padding: '0.875rem', background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.75rem', color: '#22c55e', fontSize: '1rem', fontWeight: 700, cursor: 'pointer' }}
+              >
+                🚚 Marquer expédiée
+              </button>
+            </div>
           )}
 
           <button
@@ -341,6 +367,7 @@ export default function Orders() {
               onClick={async () => {
                 setScanError('');
                 setScanSuccess('');
+                setTrackingInput('');
                 setSelectedOrder(order);
                 // Fetch fresh detail to get latest scanned counts
                 try {
