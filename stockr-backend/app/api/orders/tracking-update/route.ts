@@ -20,13 +20,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'trackingRef et status (deposited | in_transit | delivered) requis' }, { status: 400 });
   }
 
-  // Le numéro scanné peut contenir des espaces ou un préfixe/suffixe : comparaison normalisée.
+  // Égalité exacte sur la valeur normalisée (espaces, casse, ponctuation ignorés).
+  // Repli : le code-barre scanné peut porter des caractères en plus (le numéro Colissimo
+  // est alors contenu dedans) — accepté seulement s'il est long (>= 10) et sans ambiguïté.
   const candidates = await prisma.order.findMany({ where: { trackingRef: { not: null } }, select: { id: true, trackingRef: true, deliveryStatus: true } });
-  const matches = candidates.filter(o => {
-    const t = normalize(o.trackingRef!);
-    return t.length >= 6 && (t === ref || t.includes(ref) || ref.includes(t));
-  });
+  const exact = candidates.filter(o => normalize(o.trackingRef!) === ref);
+  const matches = exact.length > 0
+    ? exact
+    : ref.length >= 10
+      ? candidates.filter(o => { const t = normalize(o.trackingRef!); return t.length >= 10 && (t.includes(ref) || ref.includes(t)); })
+      : [];
   if (matches.length === 0) return NextResponse.json({ updated: 0, reason: 'Aucune commande avec ce numéro de suivi' });
+  if (matches.length > 1) {
+    return NextResponse.json({ updated: 0, reason: 'Plusieurs commandes correspondent : mise à jour refusée' }, { status: 409 });
+  }
 
   let updated = 0;
   for (const o of matches) {
