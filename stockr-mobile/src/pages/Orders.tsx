@@ -15,6 +15,12 @@ function statusLabel(s: string) {
   return { label: s, color: '#64748b' };
 }
 
+export const DELIVERY: Record<string, { label: string; color: string; icon: string }> = {
+  deposited:  { label: 'Déposé',     color: '#a5b4fc', icon: '📮' },
+  in_transit: { label: 'En transit', color: '#f59e0b', icon: '🚚' },
+  delivered:  { label: 'Livré',      color: '#22c55e', icon: '✅' },
+};
+
 function fmtDate(d: string) {
   return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
@@ -296,6 +302,13 @@ export default function Orders() {
             </button>
           </div>
         )}
+        {selectedOrder.deliveryStatus && DELIVERY[selectedOrder.deliveryStatus] && (
+          <div style={{ background: 'rgba(100,116,139,0.08)', border: `1px solid ${DELIVERY[selectedOrder.deliveryStatus].color}55`, borderRadius: '0.75rem', padding: '0.625rem 0.875rem', marginBottom: '0.75rem', fontSize: '0.8125rem', color: DELIVERY[selectedOrder.deliveryStatus].color }}>
+            {DELIVERY[selectedOrder.deliveryStatus].icon} Livraison : <strong>{DELIVERY[selectedOrder.deliveryStatus].label}</strong>
+            {selectedOrder.deliveryDetail && <span style={{ color: '#94a3b8' }}> — {selectedOrder.deliveryDetail}</span>}
+            {selectedOrder.deliveryUpdatedAt && <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.125rem' }}>Mis à jour {fmtDate(selectedOrder.deliveryUpdatedAt)}</div>}
+          </div>
+        )}
         {selectedOrder.notes && (
           <div style={{ background: 'rgba(43,140,238,0.06)', border: '1px solid rgba(43,140,238,0.2)', borderRadius: '0.75rem', padding: '0.75rem', marginBottom: '1rem', fontSize: '0.875rem', color: '#94a3b8' }}>
             {selectedOrder.notes}
@@ -549,6 +562,11 @@ export default function Orders() {
                   <p style={{ margin: '0.25rem 0 0', fontSize: '0.8125rem', color: '#94a3b8' }}>
                     {order.items.map(i => `${i.variant?.name || i.variantName} ×${i.quantity}`).join(', ')}
                   </p>
+                  {order.deliveryStatus && DELIVERY[order.deliveryStatus] && (
+                    <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', fontWeight: 600, color: DELIVERY[order.deliveryStatus].color }}>
+                      {DELIVERY[order.deliveryStatus].icon} {DELIVERY[order.deliveryStatus].label}
+                    </p>
+                  )}
                 </div>
                 <div style={{ marginLeft: '0.75rem', textAlign: 'right' }}>
                   <span style={{ background: `${color}22`, color, border: `1px solid ${color}44`, borderRadius: '9999px', padding: '0.125rem 0.625rem', fontSize: '0.75rem', fontWeight: 600 }}>

@@ -2,9 +2,10 @@
 // orders page
 import { useEffect, useState } from 'react';
 import { wGet, wFetch } from '../_api';
+import { DELIVERY } from '@/lib/delivery';
 
 interface OrderItem { id: string; variantName: string; quantity: number; scanned: number; barcode?: string | null; variantId?: string | null; variant?: { name: string; product?: { name: string } } | null; }
-interface Order { id: string; status: string; customerName?: string | null; customerEmail?: string | null; notes?: string | null; shippingDate?: string | null; trackingRef?: string | null; locationId?: string | null; items: OrderItem[]; createdAt: string; }
+interface Order { id: string; status: string; customerName?: string | null; customerEmail?: string | null; notes?: string | null; shippingDate?: string | null; trackingRef?: string | null; deliveryStatus?: string | null; deliveryDetail?: string | null; deliveryUpdatedAt?: string | null; locationId?: string | null; items: OrderItem[]; createdAt: string; }
 interface Location { id: string; name: string; isDefault?: boolean; }
 interface Variant { id: string; name: string; barcode?: string | null; supplierRef?: string | null; }
 
@@ -193,6 +194,7 @@ export default function OrdersPage() {
                 </div>
                 {o.shippingDate && <p style={{ margin: '0.125rem 0 0', fontSize: '0.7rem', color: '#f59e0b' }}>📅 {new Date(o.shippingDate).toLocaleDateString('fr-FR')}</p>}
                 {o.trackingRef && <p style={{ margin: '0.125rem 0 0', fontSize: '0.7rem', color: '#22c55e' }}>📦 {o.trackingRef}</p>}
+                {o.deliveryStatus && DELIVERY[o.deliveryStatus] && <p style={{ margin: '0.125rem 0 0', fontSize: '0.7rem', fontWeight: 600, color: DELIVERY[o.deliveryStatus].color }}>{DELIVERY[o.deliveryStatus].icon} {DELIVERY[o.deliveryStatus].label}</p>}
               </div>
             );
           })}
@@ -294,6 +296,16 @@ export default function OrdersPage() {
                 style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '0.375rem', color: '#22c55e', fontSize: '0.75rem', padding: '0.25rem 0.625rem', cursor: 'pointer' }}>
                 Copier
               </button>
+            </div>
+          )}
+
+          {selected.deliveryStatus && DELIVERY[selected.deliveryStatus] && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(100,116,139,0.08)', border: `1px solid ${DELIVERY[selected.deliveryStatus].color}55`, borderRadius: '0.5rem', padding: '0.5rem 0.75rem' }}>
+              <span style={{ fontSize: '0.8125rem', color: DELIVERY[selected.deliveryStatus].color, flex: 1 }}>
+                {DELIVERY[selected.deliveryStatus].icon} Livraison : <strong>{DELIVERY[selected.deliveryStatus].label}</strong>
+                {selected.deliveryDetail && <span style={{ marginLeft: '0.5rem', color: '#94a3b8' }}>— {selected.deliveryDetail}</span>}
+              </span>
+              {selected.deliveryUpdatedAt && <span style={{ fontSize: '0.7rem', color: '#64748b' }}>maj {new Date(selected.deliveryUpdatedAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>}
             </div>
           )}
 

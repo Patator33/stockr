@@ -444,6 +444,9 @@ export interface Order {
   status: string; // pending | confirmed | prepared | shipped
   shippingDate?: string | null;
   trackingRef?: string | null;
+  deliveryStatus?: string | null; // deposited | in_transit | delivered
+  deliveryDetail?: string | null;
+  deliveryUpdatedAt?: string | null;
   locationId?: string | null;
   items: OrderItem[];
   createdAt: string;

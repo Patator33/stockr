@@ -178,6 +178,9 @@ model Order {
   status          String           @default("pending")
   shippingDate    DateTime?
   trackingRef     String?
+  deliveryStatus    String?
+  deliveryDetail    String?
+  deliveryUpdatedAt DateTime?
   locationId      String?
   location        StorageLocation? @relation(fields: [locationId], references: [id])
   items           OrderItem[]
