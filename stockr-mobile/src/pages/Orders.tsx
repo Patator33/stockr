@@ -305,7 +305,7 @@ export default function Orders() {
         {selectedOrder.deliveryStatus && DELIVERY[selectedOrder.deliveryStatus] && (
           <div style={{ background: 'rgba(100,116,139,0.08)', border: `1px solid ${DELIVERY[selectedOrder.deliveryStatus].color}55`, borderRadius: '0.75rem', padding: '0.625rem 0.875rem', marginBottom: '0.75rem', fontSize: '0.8125rem', color: DELIVERY[selectedOrder.deliveryStatus].color }}>
             {DELIVERY[selectedOrder.deliveryStatus].icon} Livraison : <strong>{DELIVERY[selectedOrder.deliveryStatus].label}</strong>
-            {selectedOrder.deliveryDetail && <span style={{ color: '#94a3b8' }}> — {selectedOrder.deliveryDetail}</span>}
+            {selectedOrder.deliveryDetail && <span style={{ color: '#94a3b8' }}> — {selectedOrder.deliveryDetail.startsWith('Livraison') ? selectedOrder.deliveryDetail : `Livraison prévue ${selectedOrder.deliveryDetail}`}</span>}
             {selectedOrder.deliveryUpdatedAt && <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.125rem' }}>Mis à jour {fmtDate(selectedOrder.deliveryUpdatedAt)}</div>}
           </div>
         )}

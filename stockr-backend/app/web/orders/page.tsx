@@ -303,7 +303,7 @@ export default function OrdersPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(100,116,139,0.08)', border: `1px solid ${DELIVERY[selected.deliveryStatus].color}55`, borderRadius: '0.5rem', padding: '0.5rem 0.75rem' }}>
               <span style={{ fontSize: '0.8125rem', color: DELIVERY[selected.deliveryStatus].color, flex: 1 }}>
                 {DELIVERY[selected.deliveryStatus].icon} Livraison : <strong>{DELIVERY[selected.deliveryStatus].label}</strong>
-                {selected.deliveryDetail && <span style={{ marginLeft: '0.5rem', color: '#94a3b8' }}>— {selected.deliveryDetail}</span>}
+                {selected.deliveryDetail && <span style={{ marginLeft: '0.5rem', color: '#94a3b8' }}>— {selected.deliveryDetail.startsWith('Livraison') ? selected.deliveryDetail : `Livraison prévue ${selected.deliveryDetail}`}</span>}
               </span>
               {selected.deliveryUpdatedAt && <span style={{ fontSize: '0.7rem', color: '#64748b' }}>maj {new Date(selected.deliveryUpdatedAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>}
             </div>
