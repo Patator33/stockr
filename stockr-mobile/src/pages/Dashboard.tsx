@@ -4,6 +4,7 @@ import { api, type Product, type StockByLocation, type Location, type Variant, t
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { useOrders } from '../hooks/useOrders';
 import PullToRefresh from '../components/PullToRefresh';
+import BulkTransfer from '../components/BulkTransfer';
 
 interface AddStockModal {
   productId: string;
@@ -55,7 +56,7 @@ export default function Dashboard() {
   const [addVariantId, setAddVariantId] = useState('');
   const [addLocationId, setAddLocationId] = useState('');
   const [addQty, setAddQty] = useState('');
-  const [addMode, setAddMode] = useState<'add' | 'remove' | 'set'>('add');
+  const [addMode, setAddMode] = useState<'add' | 'transfer' | 'set' | 'remove'>('add');
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState('');
   const [addVariants, setAddVariants] = useState<Variant[]>([]);
@@ -175,6 +176,7 @@ export default function Dashboard() {
 
   const handleAddStock = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (addMode === 'transfer') return; // géré par BulkTransfer
     setAddError('');
     setAddLoading(true);
     try {
@@ -455,9 +457,10 @@ export default function Dashboard() {
             <form onSubmit={handleAddStock} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {/* Mode selector */}
               <div style={{ display: 'flex', gap: '0.375rem' }}>
-                {(['add', 'remove', 'set'] as const).map(m => {
-                  const labels = { add: '+ Ajouter', remove: '− Retirer', set: '= Définir' };
+                {(['add', 'transfer', 'set', 'remove'] as const).map(m => {
+                  const labels = { add: '+ Ajouter', transfer: '⇄ Déplacer', set: '= Définir', remove: '− Retirer' };
                   const colors = {
+                    transfer: { active: { background: 'rgba(168,85,247,0.15)', color: '#a855f7', border: '1px solid rgba(168,85,247,0.4)' }, idle: { background: 'none', color: '#64748b', border: '1px solid #2a3045' } },
                     add:    { active: { background: 'rgba(34,197,94,0.15)',  color: '#22c55e', border: '1px solid rgba(34,197,94,0.4)'  }, idle: { background: 'none', color: '#64748b', border: '1px solid #2a3045' } },
                     remove: { active: { background: 'rgba(239,68,68,0.15)',  color: '#ef4444', border: '1px solid rgba(239,68,68,0.4)'  }, idle: { background: 'none', color: '#64748b', border: '1px solid #2a3045' } },
                     set:    { active: { background: 'rgba(43,140,238,0.15)', color: '#2b8cee', border: '1px solid rgba(43,140,238,0.4)' }, idle: { background: 'none', color: '#64748b', border: '1px solid #2a3045' } },
@@ -466,6 +469,13 @@ export default function Dashboard() {
                   return <button key={m} type="button" style={style} onClick={() => setAddMode(m)}>{labels[m]}</button>;
                 })}
               </div>
+              {addMode === 'transfer' ? (
+                <BulkTransfer
+                  locations={locations}
+                  onCancel={() => setAddStockModal(null)}
+                  onDone={async () => { setAddStockModal(null); await load(); }}
+                />
+              ) : (<>
               <div>
                 <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">Variante</label>
                 <select value={addVariantId} onChange={e => setAddVariantId(e.target.value)} required>
@@ -497,6 +507,7 @@ export default function Dashboard() {
                   {addLoading ? '…' : addMode === 'add' ? 'Ajouter' : addMode === 'remove' ? 'Retirer' : 'Définir'}
                 </button>
               </div>
+              </>)}
             </form>
           </div>
         </div>

@@ -484,12 +484,116 @@ function ProductsTab() {
   );
 }
 
+/* ── Déplacement groupé entre zones ── */
+function BulkTransfer({ locations, onDone }: { locations: Location[]; onDone: () => void }) {
+  const [fromId, setFromId] = useState('');
+  const [toId,   setToId]   = useState('');
+  const [items,  setItems]  = useState<StockByLoc['items']>([]);
+  const [qty,    setQty]    = useState<Record<string, string>>({});
+  const [notes,  setNotes]  = useState('');
+  const [busy,   setBusy]   = useState(false);
+  const [msg,    setMsg]    = useState('');
+
+  useEffect(() => {
+    setQty({}); setMsg('');
+    if (!fromId) { setItems([]); return; }
+    wGet<StockByLoc[]>('/api/stocks')
+      .then(all => setItems((all.find(s => s.location.id === fromId)?.items ?? []).filter(i => i.quantity > 0)))
+      .catch(() => setMsg('Erreur de chargement'));
+  }, [fromId]);
+
+  const lines = items.map(i => ({ variantId: i.variantId, quantity: Math.floor(Number(qty[i.variantId]) || 0), max: i.quantity }));
+  const toMove = lines.filter(l => l.quantity > 0);
+  const tooMuch = lines.some(l => l.quantity > l.max);
+
+  const submit = async () => {
+    setBusy(true); setMsg('');
+    const res = await wFetch('/api/stocks/transfer-bulk', { method: 'POST', body: JSON.stringify({ fromLocationId: fromId, toLocationId: toId, notes, items: toMove.map(l => ({ variantId: l.variantId, quantity: l.quantity })) }) });
+    const d = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (!res.ok) { setMsg(d.error || 'Erreur'); return; }
+    setMsg(`✓ ${d.units} unité${d.units > 1 ? 's' : ''} déplacée${d.units > 1 ? 's' : ''} (${d.moved} référence${d.moved > 1 ? 's' : ''})`);
+    setQty({});
+    const all = await wGet<StockByLoc[]>('/api/stocks');
+    setItems((all.find(s => s.location.id === fromId)?.items ?? []).filter(i => i.quantity > 0));
+    onDone();
+  };
+
+  const lbl = { fontSize:'0.75rem', color:'#64748b', display:'block', marginBottom:'0.25rem' } as const;
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:'0.75rem' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.75rem' }}>
+        <div>
+          <label style={lbl}>Zone de départ</label>
+          <select value={fromId} onChange={e => { setFromId(e.target.value); if (e.target.value === toId) setToId(''); }}>
+            <option value="">— Sélectionner —</option>
+            {locations.map(l => <option key={l.id} value={l.id}>{l.isDefault?'★ ':''}{l.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={lbl}>Zone d'arrivée</label>
+          <select value={toId} onChange={e => setToId(e.target.value)}>
+            <option value="">— Sélectionner —</option>
+            {locations.filter(l => l.id !== fromId).map(l => <option key={l.id} value={l.id}>{l.isDefault?'★ ':''}{l.name}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {fromId && items.length === 0 && <p style={{ margin:0, color:'#475569', fontSize:'0.875rem' }}>Aucun article en stock dans cette zone.</p>}
+      {items.length > 0 && (
+        <table>
+          <thead><tr><th>Produit</th><th>Variante</th><th>En stock</th><th>À déplacer</th></tr></thead>
+          <tbody>
+            {items.map(i => {
+              const v = Math.floor(Number(qty[i.variantId]) || 0);
+              return (
+                <tr key={i.variantId}>
+                  <td style={{ fontSize:'0.8125rem', color:'#94a3b8' }}>{i.productName}</td>
+                  <td style={{ fontWeight:600 }}>{i.variantName}</td>
+                  <td style={{ fontWeight:700, color:'#22c55e' }}>{i.quantity}</td>
+                  <td>
+                    <div style={{ display:'flex', gap:'0.375rem', alignItems:'center' }}>
+                      <input type="number" min={0} max={i.quantity} step={1} value={qty[i.variantId] ?? ''} placeholder="0"
+                        onChange={e => setQty(q => ({ ...q, [i.variantId]: e.target.value }))}
+                        style={{ width:'5.5rem', borderColor: v > i.quantity ? '#ef4444' : undefined }} />
+                      <button type="button" className="btn-ghost" style={{ fontSize:'0.7rem', padding:'0.25rem 0.5rem' }}
+                        onClick={() => setQty(q => ({ ...q, [i.variantId]: String(i.quantity) }))}>Tout</button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+
+      {items.length > 0 && (
+        <>
+          <div>
+            <label style={lbl}>Remarque (facultatif)</label>
+            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Remarque…" />
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:'0.75rem' }}>
+            <button type="button" className="btn-primary" style={{ background:'#a855f7' }}
+              disabled={busy || !toId || toMove.length === 0 || tooMuch} onClick={submit}>
+              {busy ? '…' : `Déplacer ${toMove.reduce((a, l) => a + l.quantity, 0)} unité(s)`}
+            </button>
+            {tooMuch && <span style={{ color:'#ef4444', fontSize:'0.8125rem' }}>Quantité supérieure au stock</span>}
+            {!toId && toMove.length > 0 && <span style={{ color:'#f59e0b', fontSize:'0.8125rem' }}>Choisis la zone d'arrivée</span>}
+          </div>
+        </>
+      )}
+      {msg && <p style={{ margin:0, fontSize:'0.875rem', color:msg.startsWith('✓')?'#22c55e':'#ef4444' }}>{msg}</p>}
+    </div>
+  );
+}
+
 /* ── Stock Tab ── */
 function StockTab() {
   const [stock,     setStock]     = useState<StockByLoc[]>([]);
   const [variants,  setVariants]  = useState<Variant[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
-  const [form, setForm] = useState({ variantId:'', locationId:'', fromLocationId:'', toLocationId:'', quantity:1, mode:'add' as 'add'|'remove'|'set'|'transfer' });
+  const [form, setForm] = useState({ variantId:'', locationId:'', quantity:1, mode:'add' as 'add'|'remove'|'set'|'transfer' });
   const [msg,  setMsg]  = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -507,11 +611,7 @@ function StockTab() {
 
   const adjust = async (e: React.FormEvent) => {
     e.preventDefault(); setMsg('');
-    if (form.mode === 'transfer') {
-      const res = await wFetch('/api/stocks/transfer', { method:'POST', body:JSON.stringify({ variantId:form.variantId, fromLocationId:form.fromLocationId, toLocationId:form.toLocationId, quantity:form.quantity }) });
-      if (!res.ok) { const d=await res.json(); setMsg(d.error||'Erreur'); return; }
-      setMsg('✓ Stock déplacé');
-    } else {
+    {
       const qty = form.mode === 'remove' ? -Math.abs(form.quantity) : form.quantity;
       const apiMode = form.mode === 'set' ? 'set' : 'add';
       const res = await wFetch('/api/stocks/adjust', { method:'POST', body:JSON.stringify({ variantId:form.variantId, locationId:form.locationId, quantity:qty, mode:apiMode }) });
@@ -541,7 +641,10 @@ function StockTab() {
               ))}
             </div>
           </div>
-          <div style={{ display:'grid', gridTemplateColumns: form.mode === 'transfer' ? 'auto 1fr 1fr auto' : 'auto 1fr 1fr auto auto', gap:'0.75rem', alignItems:'end', flexWrap:'wrap' }}>
+          {form.mode === 'transfer' ? (
+            <BulkTransfer locations={locations} onDone={load} />
+          ) : (
+          <div style={{ display:'grid', gridTemplateColumns: 'auto 1fr 1fr auto auto', gap:'0.75rem', alignItems:'end', flexWrap:'wrap' }}>
           <div>
             <label style={{ fontSize:'0.75rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Variante</label>
             <select value={form.variantId} onChange={e => setForm(f=>({...f,variantId:e.target.value}))} required>
@@ -549,24 +652,6 @@ function StockTab() {
               {variants.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
             </select>
           </div>
-          {form.mode === 'transfer' ? (
-            <>
-              <div>
-                <label style={{ fontSize:'0.75rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Zone source</label>
-                <select value={form.fromLocationId} onChange={e => setForm(f=>({...f,fromLocationId:e.target.value}))} required>
-                  <option value="">— Sélectionner —</option>
-                  {locations.map(l => <option key={l.id} value={l.id}>{l.isDefault?'★ ':''}{l.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{ fontSize:'0.75rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Zone destination</label>
-                <select value={form.toLocationId} onChange={e => setForm(f=>({...f,toLocationId:e.target.value}))} required>
-                  <option value="">— Sélectionner —</option>
-                  {locations.filter(l => l.id !== form.fromLocationId).map(l => <option key={l.id} value={l.id}>{l.isDefault?'★ ':''}{l.name}</option>)}
-                </select>
-              </div>
-            </>
-          ) : (
             <div>
               <label style={{ fontSize:'0.75rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Zone</label>
               <select value={form.locationId} onChange={e => setForm(f=>({...f,locationId:e.target.value}))} required>
@@ -574,7 +659,6 @@ function StockTab() {
                 {locations.map(l => <option key={l.id} value={l.id}>{l.isDefault?'★ ':''}{l.name}</option>)}
               </select>
             </div>
-          )}
           <div>
             <label style={{ fontSize:'0.75rem', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Quantité</label>
             <input type="number" min={1} step={1} value={form.quantity} onChange={e => setForm(f=>({...f,quantity:Number(e.target.value)}))} required style={{ width:'6rem' }} />
@@ -583,6 +667,7 @@ function StockTab() {
             {modeLabel[form.mode]}
           </button>
           </div>
+          )}
         </form>
         {msg && <p style={{ marginTop:'0.5rem', fontSize:'0.875rem', color:msg.startsWith('✓')?'#22c55e':'#ef4444' }}>{msg}</p>}
       </div>

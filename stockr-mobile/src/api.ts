@@ -139,6 +139,8 @@ export const api = {
     adjust: (data: { variantId: string; locationId: string; quantity: number; mode?: 'add' | 'set' }) =>
       post('/api/stocks/adjust', data),
     transfer: (data: TransferInput) => post('/api/stocks/transfer', data),
+    transferBulk: (data: { fromLocationId: string; toLocationId: string; notes?: string; items: { variantId: string; quantity: number }[] }) =>
+      post<{ ok: boolean; moved: number; units: number }>('/api/stocks/transfer-bulk', data),
   },
   sales: {
     list: (params?: { productId?: string; from?: string; to?: string; page?: number; supplierId?: string }) => {
