@@ -1,0 +1,345 @@
+{
+  "name": "commandes amazon avec fournisseur filtre sujet",
+  "nodes": [
+    {
+      "id": "0277f1d6-481c-495d-9dd9-1e33058a7fa9",
+      "name": "Gmail — Nouvelles commandes",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1712,
+        304
+      ],
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {
+          "includeSpamTrash": false,
+          "readStatus": "unread"
+        }
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REMPLACER",
+          "name": "Compte Gmail (credential OAuth2 à recréer)"
+        }
+      }
+    },
+    {
+      "id": "7b121b6d-ae5d-42c5-8c3a-6a7099dbab7e",
+      "name": "Filtre sujet",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -1504,
+        304
+      ],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.Subject }}",
+              "operation": "contains",
+              "value2": "Commande"
+            },
+            {
+              "value1": "={{ $json.Subject }}",
+              "operation": "contains",
+              "value2": "dier"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "819c21ab-9e4b-4366-b858-54b5249853c3",
+      "name": "Get Gmail Full Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1216,
+        288
+      ],
+      "parameters": {
+        "url": "=https://gmail.googleapis.com/gmail/v1/users/me/messages/{{ $json.id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "format",
+              "value": "full"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REMPLACER",
+          "name": "Compte Gmail (credential OAuth2 à recréer)"
+        }
+      }
+    },
+    {
+      "id": "2de29dd2-3e1e-4ae0-a940-9930ede8a35b",
+      "name": "Code in JavaScript",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1040,
+        288
+      ],
+      "parameters": {
+        "jsCode": "function decodeEntities(s) {\n  return s\n    .replace(/&nbsp;|&#160;|&#xa0;/gi, ' ')\n    .replace(/&amp;/gi, '&')\n    .replace(/&lt;/gi, '<')\n    .replace(/&gt;/gi, '>')\n    .replace(/&quot;/gi, '\"')\n    .replace(/&#39;|&apos;/gi, \"'\")\n    .replace(/ /g, ' ');\n}\n\nfunction extractText(payload) {\n  if (payload?.body?.data) {\n    const text = Buffer.from(payload.body.data, 'base64url').toString('utf-8');\n    if (text.trim()) return text;\n  }\n  function searchParts(parts = []) {\n    for (const part of parts) {\n      if (part.mimeType === 'text/plain' && part.body?.data)\n        return Buffer.from(part.body.data, 'base64url').toString('utf-8');\n      if (part.parts) {\n        const found = searchParts(part.parts);\n        if (found) return found;\n      }\n    }\n    for (const part of parts) {\n      if (part.mimeType === 'text/html' && part.body?.data) {\n        const html = Buffer.from(part.body.data, 'base64url').toString('utf-8');\n        return html.replace(/<style[\\s\\S]*?<\\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim();\n      }\n    }\n    return null;\n  }\n  return searchParts(payload?.parts) || $json.snippet || \"\";\n}\n\nconst emailText = decodeEntities(extractText($json.payload)).replace(/\\s+/g, ' ');\n\nconst orderId = emailText.match(/commande\\s*[:*]*\\s*([0-9]{3}-[0-9]{7}-[0-9]{7})/i)?.[1] || \"\";\n\nconst shipDateMatch = emailText.match(/Exp.?dier\\s+avant\\s+le[^0-9]*(\\d{2}\\/\\d{2}\\/\\d{4})/i);\nconst rawDate = shipDateMatch ? shipDateMatch[1] : \"Non trouvé\";\n\nconst blocks = emailText.split(/Produit\\s*[:*]*/i).slice(1);\nconst finalBlocks = blocks.length > 0 ? blocks : emailText.split(/SKU\\s*[:*]*/i).slice(1);\n\nconst items = finalBlocks.map(block => {\n  const sku = block.match(/SKU\\s*[*]?\\s*:?\\s*[*]?\\s*([A-Za-z0-9][A-Za-z0-9._-]*)/i)?.[1] || \"\";\n  const quantity = parseInt(block.match(/Quantit[eé]\\s*[*]?\\s*:?\\s*[*]?\\s*(\\d+)/i)?.[1]) || 1;\n  return { sku, quantity };\n});\n\nreturn [{ json: { source: \"gmail\", orderId, date_limite_expedition: rawDate, notes: `Commande Amazon ${orderId}`, items } }];"
+      }
+    },
+    {
+      "id": "bc3a5f0a-c387-4121-ace3-640fca8e0b10",
+      "name": "Prepare API Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -832,
+        288
+      ],
+      "parameters": {
+        "jsCode": "const inputData = $input.first().json;\nlet formattedDate = null;\nif (inputData.date_limite_expedition && inputData.date_limite_expedition !== \"Non trouvé\") {\n  const parts = inputData.date_limite_expedition.split('/');\n  if (parts.length === 3) {\n    formattedDate = `${parts[2]}-${parts[1]}-${parts[0]}`;\n  }\n}\nconst itemsForStockr = inputData.items\n  .filter(item => item.sku || item.quantity > 0)\n  .map(item => {\n    const result = { quantity: parseInt(item.quantity) || 1 };\n    if (item.sku) {\n      // SKU Amazon -> supplierRef : le backend résout le vrai nom de la variante\n      result.supplierRef = item.sku;\n    } else {\n      result.variantName = 'Article non identifié';\n    }\n    return result;\n  });\nreturn {\n  customerName: \"Amazon Order\",\n  customerEmail: inputData.customerEmail || \"client@example.com\",\n  shippingDate: formattedDate,\n  notes: inputData.notes,\n  source: \"amazon\",\n  items: itemsForStockr\n};"
+      }
+    },
+    {
+      "id": "8dea0dc7-6492-4840-8d2c-e969c9e70605",
+      "name": "POST Order to API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -480,
+        288
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://VOTRE-DOMAINE-STOCKR/api/orders",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-API-Key",
+              "value": "REMPLACER_PAR_LA_CLE_N8N_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $input.first().json }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "18d84bab-c84c-47d3-a0ae-c6a1ea7ecff7",
+      "name": "Commande créée ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        288
+      ],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.id }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "4dd0be14-abb3-41a6-bc17-acbe51719bc8",
+      "name": "Marquer lu",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [
+        -32,
+        176
+      ],
+      "parameters": {
+        "operation": "markAsRead",
+        "messageId": "={{ $('Gmail — Nouvelles commandes').item.json.id }}"
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REMPLACER",
+          "name": "Compte Gmail (credential OAuth2 à recréer)"
+        }
+      }
+    },
+    {
+      "id": "b523e99d-7ca5-45ec-9776-3042b1594388",
+      "name": "Mail à l’expédition",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -32,
+        16
+      ],
+      "parameters": {
+        "sendTo": "EXPEDITEUR@example.com",
+        "subject": "Commande Amazon",
+        "message": "Bonjour,\nJe viens d'enregistrer une commande sur Stockr.\n\nA toi de jouer pour l'expédition.\n\nStockr",
+        "options": {}
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REMPLACER",
+          "name": "Compte Gmail (credential OAuth2 à recréer)"
+        }
+      }
+    },
+    {
+      "id": "d070abfb-aabc-4284-80fc-3a74e5abd069",
+      "name": "Log erreur",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -32,
+        384
+      ],
+      "parameters": {
+        "jsCode": "console.error('Erreur création commande:', JSON.stringify($input.first().json));\nreturn $input.all();"
+      }
+    },
+    {
+      "id": "80b64bba-4371-4ab1-99a0-d70eaaeb5ccf",
+      "name": "Mail erreur (désactivé)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -32,
+        560
+      ],
+      "disabled": true,
+      "parameters": {
+        "sendTo": "EXPEDITEUR@example.com;ADMIN@example.com",
+        "subject": "Commande Amazon",
+        "message": "Bonjour,\nJe viens de tenter d'enregistrer une commande sur Stockr.\n\nIl semble y avoir eu un problème, il faut regarder ce qu'il se passe.\n\nStockr",
+        "options": {}
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REMPLACER",
+          "name": "Compte Gmail (credential OAuth2 à recréer)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Gmail — Nouvelles commandes": {
+      "main": [
+        [
+          {
+            "node": "Filtre sujet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtre sujet": {
+      "main": [
+        [
+          {
+            "node": "Get Gmail Full Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Gmail Full Message": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Prepare API Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare API Body": {
+      "main": [
+        [
+          {
+            "node": "POST Order to API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST Order to API": {
+      "main": [
+        [
+          {
+            "node": "Commande créée ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Commande créée ?": {
+      "main": [
+        [
+          {
+            "node": "Marquer lu",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Mail à l’expédition",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log erreur",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Mail erreur (désactivé)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

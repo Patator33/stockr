@@ -11,17 +11,16 @@ stockr-backend/*.db-journal
 stockr-backend/prisma/*.db
 stockr-backend/prisma/*.db-journal
 
-# Mobile build
+# Mobile build (le projet Android est suivi ; ses propres .gitignore excluent build/, local.properties, *.apk)
 stockr-mobile/dist/
-stockr-mobile/android/
 stockr-mobile/ios/
+stockr-mobile/android/.idea/
 
-# Except the Android manifest (tracked to allow native customizations)
-!stockr-mobile/android/
-!stockr-mobile/android/app/
-!stockr-mobile/android/app/src/
-!stockr-mobile/android/app/src/main/
-!stockr-mobile/android/app/src/main/AndroidManifest.xml
+# Fichiers générés par tsc
+*.tsbuildinfo
+
+# APK locaux (voir scripts/build-apk.ps1)
+*.apk
 
 # Env files
 .env
