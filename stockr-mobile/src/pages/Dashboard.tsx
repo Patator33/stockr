@@ -5,6 +5,7 @@ import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { useOrders } from '../hooks/useOrders';
 import PullToRefresh from '../components/PullToRefresh';
 import BulkTransfer from '../components/BulkTransfer';
+import QtyStepper from '../components/QtyStepper';
 
 interface AddStockModal {
   productId: string;
@@ -498,7 +499,7 @@ export default function Dashboard() {
                 <label className="text-text-muted text-xs uppercase tracking-wide block mb-1">
                   {addMode === 'add' ? 'Quantité à ajouter' : addMode === 'remove' ? 'Quantité à retirer' : 'Nouvelle quantité'}
                 </label>
-                <input type="number" min={addMode === 'set' ? '0' : '1'} value={addQty} onChange={e => setAddQty(e.target.value)} required />
+                <QtyStepper value={addQty} onChange={setAddQty} min={addMode === 'set' ? 0 : 1} width="100%" required />
               </div>
               {addError && <p style={{ color: '#ef4444', fontSize: '0.875rem', margin: 0 }}>{addError}</p>}
               <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem' }}>

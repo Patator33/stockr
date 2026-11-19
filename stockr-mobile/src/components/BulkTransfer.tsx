@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type Location, type StockItem } from '../api';
+import QtyStepper from './QtyStepper';
 
 interface Props {
   locations: Location[];
@@ -84,11 +85,10 @@ export default function BulkTransfer({ locations, onCancel, onDone }: Props) {
                   <p style={{ margin: 0, fontSize: '0.8125rem', fontWeight: 600, color: '#e2e8f0' }}>{i.variantName}</p>
                   <p style={{ margin: 0, fontSize: '0.7rem', color: '#64748b' }}>{i.productName} · en stock : {i.quantity}</p>
                 </div>
-                <input
-                  type="number" inputMode="numeric" min={0} max={i.quantity} placeholder="0"
+                <QtyStepper
                   value={qty[i.variantId] ?? ''}
-                  onChange={e => setQty(q => ({ ...q, [i.variantId]: e.target.value }))}
-                  style={{ width: '4.5rem', margin: 0, textAlign: 'center', borderColor: v > i.quantity ? '#ef4444' : undefined }}
+                  onChange={val => setQty(q => ({ ...q, [i.variantId]: val }))}
+                  min={0} max={i.quantity} invalid={v > i.quantity} width="3rem"
                 />
                 <button
                   type="button"
