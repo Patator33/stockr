@@ -20,7 +20,8 @@
         },
         "filters": {
           "includeSpamTrash": false,
-          "readStatus": "unread"
+          "readStatus": "unread",
+          "sender": "seller-notification@amazon.fr"
         }
       },
       "credentials": {
